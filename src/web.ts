@@ -1,0 +1,399 @@
+import './style.css';
+import { parseBundle } from './schema.ts';
+import type { Bundle, Scalar, Variable } from './schema.ts';
+import { simulate } from './engine.ts';
+
+const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const status = byId<HTMLDivElement>('status');
+const results = byId<HTMLElement>('results');
+const form = byId<HTMLFormElement>('research-form');
+const question = byId<HTMLTextAreaElement>('question');
+const input = byId<HTMLInputElement>('import');
+const researchButton = byId<HTMLButtonElement>('research-button');
+let selectedDemo: string | undefined;
+let operation = 0;
+
+function el<K extends keyof HTMLElementTagNameMap>(name: K, className?: string, text?: string) {
+  const item = document.createElement(name);
+  if (className) item.className = className;
+  if (text !== undefined) item.textContent = text;
+  return item;
+}
+
+function say(text = '') {
+  status.textContent = text;
+  status.hidden = !text;
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+const changes = { same: '相同', different: '改变', higher: '增加', lower: '减少', unknown: '证据不足' };
+const kinds = { supported: '有来源', disputed: '史料有争议', assumption: '模型假设', gap: '证据缺口' };
+const number = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 8 });
+function show(value: Scalar, unit?: string) {
+  if (value === null) return '待定';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (typeof value === 'string') return value;
+  return number.format(value) + (unit && unit !== '1' ? ' ' + unit : '');
+}
+
+function setBundle(data: unknown, demo?: string) {
+  const bundle = parseBundle(data);
+  selectedDemo = demo;
+  document.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.case === demo));
+  });
+  render(bundle);
+  results.hidden = false;
+  results.focus();
+  results.scrollIntoView({ block: 'start' });
+}
+
+function references(bundle: Bundle, ids: string[]) {
+  const holder = el('span', 'refs');
+  for (const id of new Set(ids)) {
+    const position = bundle.claims.findIndex((claim) => claim.id === id);
+    const link = el('a', undefined, '[' + (position + 1) + ']');
+    link.href = '#claim-' + id;
+    link.setAttribute('aria-label', '证据 ' + (position + 1));
+    holder.append(link, ' ');
+  }
+  return holder;
+}
+
+function viewSources(bundle: Bundle) {
+  const section = el('section', 'monitor');
+  section.append(el('h3', undefined, '史料与假设'));
+  if (!bundle.claims.length) section.append(el('p', 'model-note', '暂未获得可引用的史料。'));
+  for (const [index, claim] of bundle.claims.entries()) {
+    const article = el('article', 'source-card');
+    article.id = 'claim-' + claim.id;
+    article.append(el('span', 'claim-type', (index + 1) + ' · ' + kinds[claim.status]), el('p', undefined, claim.text));
+    for (const citation of claim.citations) {
+      const source = bundle.sources.find((item) => item.id === citation.source)!;
+      const quote = el('blockquote', undefined, citation.quote);
+      const link = el('a', undefined, source.title + ' · ' + citation.locator + ' ↗');
+      link.href = source.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      article.append(quote, link);
+    }
+    section.append(article);
+  }
+  const cited = new Set(bundle.claims.flatMap((claim) => claim.citations.map(({ source }) => source)));
+  const candidates = bundle.sources.filter(({ id }) => !cited.has(id));
+  if (candidates.length) {
+    const panel = el('details', 'source-card');
+    panel.append(el('summary', undefined, '待核查的候选来源'));
+    const list = el('ul', 'event-list');
+    candidates.forEach((source) => {
+      const item = el('li');
+      const link = el('a', undefined, source.title + ' ↗');
+      link.href = source.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      item.append(link);
+      list.append(item);
+    });
+    panel.append(list);
+    section.append(panel);
+  }
+  return section;
+}
+
+function makeSelect(label: string, choices: { id: string; label: string }[]) {
+  const wrapper = el('label', undefined, label);
+  const select = el('select');
+  for (const choice of choices) {
+    const option = el('option', undefined, choice.label);
+    option.value = choice.id;
+    select.append(option);
+  }
+  wrapper.append(select);
+  return { wrapper, select };
+}
+
+function modelTable(headings: string[], rows: string[][]) {
+  const frame = el('div', 'scroll-table');
+  const table = el('table');
+  const head = table.createTHead().insertRow();
+  headings.forEach((name) => head.append(el('th', undefined, name)));
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    row.forEach((value) => tr.append(el('td', value === '待定' ? 'unknown' : undefined, value)));
+  }
+  frame.append(table);
+  return frame;
+}
+
+function parameterControl(variable: Variable, value: Scalar) {
+  if (variable.kind === 'number') {
+    const field = el('input');
+    field.type = 'number';
+    field.step = 'any';
+    if (variable.min !== undefined) field.min = String(variable.min);
+    if (variable.max !== undefined) field.max = String(variable.max);
+    field.value = value === null ? '' : String(value);
+    const wrapper = el('label', undefined, variable.label);
+    wrapper.append(field);
+    return { wrapper, read: (): Scalar => field.value === '' ? null : field.valueAsNumber };
+  }
+  const choices = variable.kind === 'boolean'
+    ? [{ id: 'true', label: '是' }, { id: 'false', label: '否' }]
+    : variable.values!.map((item) => ({ id: item, label: item }));
+  const { wrapper, select } = makeSelect(variable.label, [{ id: '', label: '待定' }, ...choices]);
+  select.value = value === null ? '' : String(value);
+  return {
+    wrapper, read: (): Scalar => select.value === '' ? null :
+      variable.kind === 'boolean' ? select.value === 'true' : select.value,
+  };
+}
+
+function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.model?.horizon) {
+  const model = bundle.model!;
+  const section = el('section', 'monitor');
+  section.append(el('h3', undefined, '基线与改写方案'));
+  const start = el('p', 'model-note', model.decisionPoint);
+  start.append(references(bundle, model.decisionBasis));
+  section.append(start);
+  const controls = el('div', 'controls');
+  const scenario = makeSelect('假设情景', [{ id: 'all', label: '全部情景' }, ...model.scenarios]);
+  scenario.select.value = scenarioValue;
+  const metric = makeSelect('观察指标', [{ id: 'all', label: '全部指标' }, ...model.metrics]);
+  const horizonLabel = el('label', undefined, '推演步数 · ' + model.stepLabel);
+  const horizon = el('input');
+  horizon.type = 'number';
+  horizon.min = '1';
+  horizon.max = String(model.horizon);
+  horizon.value = String(horizonValue);
+  horizonLabel.append(horizon);
+  controls.append(scenario.wrapper, horizonLabel, metric.wrapper);
+  const editor = el('div');
+  const output = el('div');
+  section.append(controls, editor, output);
+
+  function refresh() {
+    try {
+      const chosenHorizon = horizon.valueAsNumber;
+      const simulation = simulate(bundle, { scenario: scenario.select.value, horizon: chosenHorizon });
+      const visible = (id: string) => metric.select.value === 'all' || metric.select.value === id;
+      const scenarioName = (id: string) => model.scenarios.find((item) => item.id === id)!.label;
+      const decisionName = (id: string) => model.decisions.find((item) => item.id === id)!.label;
+      const indicator = (id: string) => model.metrics.find((item) => item.id === id)!;
+      const unit = (field: string) => model.variables.find((item) => item.id === field)?.unit;
+      const table = modelTable(['情景', '改写方案', '指标', '基线', '改写后'], simulation.comparisons
+        .filter((row) => visible(row.metric)).map((row) => [
+          scenarioName(row.scenario), decisionName(row.decision), indicator(row.metric).label,
+          show(row.before, unit(indicator(row.metric).field)), show(row.after, unit(indicator(row.metric).field)),
+        ]));
+      const summary = el('ul', 'event-list');
+      for (const row of simulation.sensitivity.filter((item) => visible(item.metric))) {
+        const label = decisionName(row.decision) + ' · ' + indicator(row.metric).label;
+        const observed = row.changes.length ? row.changes.map((change) => changes[change as keyof typeof changes]).join('、') : '待定';
+        const range = row.deltaRange
+          ? '。数值差为 ' + row.deltaRange.map((value) => show(value, unit(indicator(row.metric).field))).join(' 至 ') : '';
+        const unknown = row.incomplete ? '。含未确定的结果' : '';
+        summary.append(el('li', undefined, label + '在已选情景中：' + observed + range + unknown));
+      }
+      const trace = el('details');
+      trace.append(el('summary', undefined, '查看规则触发过程'));
+      for (const run of simulation.runs) {
+        const path = el('details', 'trace-block');
+        path.append(el('summary', undefined, scenarioName(run.scenario) + ' · ' + decisionName(run.decision)));
+        path.addEventListener('toggle', () => {
+          if (!path.open || path.childElementCount > 1) return;
+          if (!run.trace.length) {
+            path.append(el('p', 'model-note', '本次范围内没有状态变化。'));
+            return;
+          }
+          const list = el('ol', 'event-list');
+          for (const event of run.trace) {
+            const rule = model.rules.find((item) => item.id === event.rule)!;
+            const item = el('li', undefined, '第 ' + event.step + ' 步 · ' + rule.label + ' · ' +
+              show(event.before, unit(event.field)) + ' → ' + show(event.after, unit(event.field)));
+            item.append(references(bundle, event.basis));
+            list.append(item);
+          }
+          path.append(list);
+        });
+        trace.append(path);
+      }
+      output.replaceChildren(table, summary, trace);
+    } catch (error) {
+      output.replaceChildren(el('p', 'model-note', '推演参数无效。' + errorText(error)));
+    }
+  }
+
+  function drawEditor() {
+    const current = model.scenarios.find((item) => item.id === scenario.select.value);
+    const parameters = model.variables.filter((item) => item.role === 'parameter');
+    editor.replaceChildren();
+    if (!current || !parameters.length) return;
+    const details = el('details', 'parameter-editor');
+    details.append(el('summary', undefined, '调整此情景的假设'));
+    const line = el('div', 'controls');
+    const edits = parameters.map((variable) => ({
+      variable, ...parameterControl(variable, Object.hasOwn(current.parameters, variable.id)
+        ? current.parameters[variable.id] : variable.initial),
+    }));
+    line.append(...edits.map((item) => item.wrapper));
+    const save = el('button', 'button secondary', '应用并复算');
+    save.type = 'button';
+    line.append(save);
+    details.append(line);
+    save.addEventListener('click', () => {
+      const updated = structuredClone(bundle);
+      const selected = updated.model!.scenarios.find((item) => item.id === current.id)!;
+      const changed = edits.filter((item) => item.read() !== (Object.hasOwn(current.parameters, item.variable.id)
+        ? current.parameters[item.variable.id] : item.variable.initial));
+      if (!changed.length) return;
+      if (changed.some((item) => typeof item.read() === 'number' && !Number.isFinite(item.read()))) {
+        say('请输入有效的数字。');
+        return;
+      }
+      let sequence = 1;
+      while (updated.claims.some((claim) => claim.id === 'user-edit-' + sequence)) sequence++;
+      const id = 'user-edit-' + sequence;
+      const changeText = changed.map(({ variable, read }) => variable.label + '＝' + show(read(), variable.unit)).join('；');
+      updated.claims.push({
+        id, status: 'assumption', scope: 'context', citations: [],
+        text: ('用户调整「' + selected.label + '」中的参数：' + changeText).slice(0, 1200),
+      });
+      selected.basis = [...selected.basis.slice(-9), id];
+      for (const { variable, read } of changed) selected.parameters[variable.id] = read();
+      try {
+        render(parseBundle(updated), current.id, horizon.valueAsNumber);
+        say('已按修改后的假设复算。');
+        byId<HTMLElement>('results-title').focus();
+      } catch (error) { say(errorText(error)); }
+    });
+    const basis = el('p', 'model-note', '此情景的依据');
+    basis.append(references(bundle, current.basis));
+    editor.append(basis, details);
+  }
+
+  scenario.select.addEventListener('change', () => { drawEditor(); refresh(); });
+  metric.select.addEventListener('change', refresh);
+  horizon.addEventListener('change', refresh);
+  drawEditor();
+  refresh();
+  return section;
+}
+
+function render(bundle: Bundle, scenario?: string, horizon?: number) {
+  const heading = el('h2', undefined, bundle.title);
+  heading.id = 'results-title';
+  heading.tabIndex = -1;
+  const header = el('div', 'result-head');
+  const button = el('button', 'button secondary', '导出分析包 ↓');
+  button.type = 'button';
+  button.onclick = () => {
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = el('a');
+    link.href = url;
+    link.download = (selectedDemo ?? 'history-analysis') + '.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+  header.append(heading, button);
+  results.replaceChildren(header, el('p', 'result-scope', bundle.scope));
+  if (bundle.model) results.append(drawModel(bundle, scenario, horizon));
+  if (bundle.status === 'clarification') {
+    const section = el('section', 'monitor');
+    section.append(el('h3', undefined, '选择要分析的问题'));
+    for (const option of bundle.options) {
+      const line = el('p', 'source-card');
+      const use = el('button', 'button secondary', option.label);
+      use.type = 'button';
+      use.onclick = () => {
+        if (form.hidden) { say(option.question); return; }
+        question.value = option.question;
+        form.requestSubmit();
+      };
+      line.append(use, references(bundle, option.basis));
+      section.append(line);
+    }
+    results.append(section);
+  }
+  const record = el('div', 'result-grid');
+  const timeline = el('section', 'monitor');
+  timeline.append(el('h3', undefined, '史实时间线'));
+  const events = el('ol', 'event-list');
+  bundle.timeline.forEach((event) => {
+    const entry = el('li');
+    entry.append(el('time', undefined, event.when), event.label, references(bundle, event.basis));
+    events.append(entry);
+  });
+  timeline.append(bundle.timeline.length ? events : el('p', 'model-note', '没有可核查的时间线条目。'));
+  const gaps = el('section', 'monitor');
+  gaps.append(el('h3', undefined, '范围与证据缺口'));
+  const list = el('ul', 'event-list');
+  bundle.gaps.forEach((gap) => list.append(el('li', undefined, gap)));
+  gaps.append(bundle.gaps.length ? list : el('p', 'model-note', '查看模型假设，了解本次推演的适用范围。'));
+  record.append(timeline, gaps);
+  results.append(record, viewSources(bundle));
+}
+
+document.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((card) => {
+  card.addEventListener('click', async () => {
+    const id = ++operation;
+    say('载入案例…');
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + 'examples/' + card.dataset.case + '.json');
+      if (!response.ok) throw new Error('案例暂时无法读取。');
+      const data: unknown = await response.json();
+      if (id === operation) { setBundle(data, card.dataset.case); say(); }
+    } catch (error) { if (id === operation) say(errorText(error)); }
+  });
+});
+
+input.addEventListener('change', async () => {
+  const file = input.files?.[0];
+  if (!file) return;
+  const id = ++operation;
+  try {
+    if (file.size > 1_000_000) throw new Error('分析包超过 1 MB。');
+    const data: unknown = JSON.parse(await file.text());
+    if (id === operation) { setBundle(data); say(); }
+  } catch (error) { if (id === operation) say('导入失败。' + errorText(error)); }
+  finally { input.value = ''; }
+});
+byId<HTMLButtonElement>('local-import').onclick = () => input.click();
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (researchButton.disabled) return;
+  const operationId = ++operation;
+  researchButton.disabled = true;
+  say('正在查找史料并构建分析，通常需要一点时间。');
+  try {
+    const sources = byId<HTMLTextAreaElement>('sources').value.split(/\r?\n/).filter((line) => line.trim()).map((line) => {
+      const [url, ...parts] = line.split(' | ');
+      return { url: url.trim(), ...(parts.length ? { excerpt: parts.join(' | ').trim() } : {}) };
+    });
+    const response = await fetch('/api/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: question.value, sources }),
+    });
+    const data: unknown = await response.json();
+    if (!response.ok) throw new Error((data as { error?: string }).error ?? '分析服务暂时不可用。');
+    if (operationId === operation) { setBundle(data); say(); }
+  } catch (error) {
+    if (operationId === operation) say(errorText(error));
+  } finally { researchButton.disabled = false; }
+});
+
+if (import.meta.env.VITE_DEMO_ONLY !== 'true') {
+  void fetch('/api/status').then(async (response) => {
+    if (!response.ok) return;
+    const data = await response.json() as { mode?: string };
+    if (data.mode !== 'self-hosted') return;
+    form.hidden = false;
+    byId('demo-entry').hidden = true;
+    byId('mode-note').textContent = '研究在这台自托管服务上运行。导出的分析包可离线复算。';
+  }).catch(() => { /* A static host renders the public demo. */ });
+}

@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "1",
+  "status": "ready",
+  "options": [],
+  "title": "如果崇祯授权太子在南京监国？",
+  "question": "1644 年廷议若授权太子赴南京，能否在这一阶段形成南京受命机构？",
+  "scope": "这是短期授权交接的机制示例。将授权能否得到接收与地方是否承认作为条件，观察交接结果。",
+  "sources": [
+    {
+      "id": "annals",
+      "title": "《明史》卷二十四 · 识典古籍",
+      "url": "https://www.shidianguji.com/zh/book/LS0024/chapter/LS0024_49",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    },
+    {
+      "id": "hongguang",
+      "title": "《弘光实录钞》卷一 · 维基文库",
+      "url": "https://zh.wikisource.org/zh/弘光實錄鈔/卷001",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    }
+  ],
+  "claims": [
+    {
+      "id": "debate",
+      "text": "《明史》记载廷臣请求太子赴南京，崇祯未接受。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "崇祯十七年三月",
+          "quote": "李邦華等復請太子撫軍南京，不聽"
+        }
+      ]
+    },
+    {
+      "id": "response",
+      "text": "模型假定南京机构须先收到可执行的授权，再由地方力量决定是否承认。授权与承认均是显式假设。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "real-nanjing",
+      "text": "北京中枢失效后，福王在南京监国是另一条继统路径。",
+      "status": "supported",
+      "scope": "observed",
+      "citations": [
+        {
+          "source": "hongguang",
+          "locator": "崇祯十七年五月",
+          "quote": "福王建監國於南京"
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "when": "崇祯十七年三月初三",
+      "label": "廷议再提太子赴南京，方案未采纳",
+      "basis": [
+        "debate"
+      ]
+    },
+    {
+      "when": "崇祯十七年五月",
+      "label": "福王在南京监国",
+      "basis": [
+        "real-nanjing"
+      ]
+    }
+  ],
+  "gaps": [
+    "短期模型聚焦太子授权的交接，南京后来的继统和政权存续另有历史条件。"
+  ],
+  "model": {
+    "decisionPoint": "崇祯十七年三月初三，廷臣再次提议让太子赴南京。",
+    "decisionBasis": [
+      "debate"
+    ],
+    "horizon": 2,
+    "stepLabel": "个交接阶段",
+    "actors": [
+      {
+        "id": "court",
+        "label": "北京朝廷"
+      },
+      {
+        "id": "nanjing",
+        "label": "南京官署及地方机构"
+      }
+    ],
+    "variables": [
+      {
+        "id": "delegate",
+        "label": "是否授权太子",
+        "role": "decision",
+        "kind": "boolean",
+        "initial": false,
+        "basis": [
+          "debate"
+        ]
+      },
+      {
+        "id": "received",
+        "label": "授权可在窗口内送达",
+        "role": "parameter",
+        "kind": "boolean",
+        "initial": true,
+        "basis": [
+          "response"
+        ]
+      },
+      {
+        "id": "support",
+        "label": "地方支持交接",
+        "role": "parameter",
+        "kind": "boolean",
+        "initial": true,
+        "basis": [
+          "response"
+        ],
+        "visibility": {
+          "nanjing": 2
+        }
+      },
+      {
+        "id": "mandate",
+        "label": "收到来自北京的授权",
+        "role": "state",
+        "kind": "boolean",
+        "initial": false,
+        "basis": [
+          "debate",
+          "response"
+        ],
+        "visibility": {
+          "nanjing": 2,
+          "court": 1
+        }
+      },
+      {
+        "id": "recognized",
+        "label": "南京形成受命机构",
+        "role": "state",
+        "kind": "boolean",
+        "initial": false,
+        "basis": [
+          "response"
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "baseline",
+        "label": "保留北京原授权",
+        "value": false,
+        "basis": [
+          "debate"
+        ]
+      },
+      {
+        "id": "delegate",
+        "label": "授权太子赴南京",
+        "value": true,
+        "basis": [
+          "debate",
+          "response"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "cooperation",
+        "label": "通信可达，地方支持",
+        "parameters": {
+          "received": true,
+          "support": true
+        },
+        "basis": [
+          "response"
+        ]
+      },
+      {
+        "id": "contested",
+        "label": "通信可达，地方拒绝",
+        "parameters": {
+          "received": true,
+          "support": false
+        },
+        "basis": [
+          "response"
+        ]
+      },
+      {
+        "id": "unverified",
+        "label": "通信状况缺少依据",
+        "parameters": {
+          "received": null,
+          "support": true
+        },
+        "basis": [
+          "response"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "send-mandate",
+        "label": "北京授权并完成交接消息传递",
+        "target": "mandate",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "ref": "delegate"
+        },
+        "value": {
+          "ref": "received"
+        },
+        "basis": [
+          "response"
+        ],
+        "actor": "court"
+      },
+      {
+        "id": "accept-mandate",
+        "label": "南京确认授权并获得地方承认",
+        "target": "recognized",
+        "start": 2,
+        "until": 2,
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "ref": "mandate"
+            },
+            {
+              "ref": "support"
+            }
+          ]
+        },
+        "value": true,
+        "basis": [
+          "response"
+        ],
+        "actor": "nanjing"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "mandate",
+        "label": "授权是否送达",
+        "field": "mandate"
+      },
+      {
+        "id": "recognized",
+        "label": "是否形成受命机构",
+        "field": "recognized"
+      }
+    ]
+  }
+}
