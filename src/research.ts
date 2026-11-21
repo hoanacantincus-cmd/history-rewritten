@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { draftJsonSchema, draftSchema, ForecastEvidenceError, parseBundle, requestSchema } from './schema.ts';
 import type { Bundle, Draft, ResearchRequest, Source } from './schema.ts';
-import { normalizeText } from './provider-core.ts';
+import { ModelProviderError, normalizeText } from './provider-core.ts';
 import type { Page, Providers } from './provider-core.ts';
 import type { ResearchProgress } from './research-progress.ts';
 
@@ -291,6 +291,7 @@ export async function research(
         return parseBundle({ ...draft, ...common });
       }
     } catch (error) {
+      if (error instanceof ModelProviderError && error.needsAccountAction) throw error;
       repair = (error instanceof z.ZodError
         ? error.issues.slice(0, 12).map(({ path, message }) => path.join('.') + ' ' + message).join('\n')
         : error instanceof Error ? error.message : 'Invalid model response').slice(0, 1800);

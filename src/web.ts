@@ -17,6 +17,8 @@ const consequence = byId<HTMLInputElement>('consequence');
 const progressPanel = byId<HTMLElement>('work-progress');
 const input = byId<HTMLInputElement>('import');
 const researchButton = byId<HTMLButtonElement>('research-button');
+const personalKeyPanel = byId<HTMLDetailsElement>('personal-key-panel');
+const personalKeyInput = byId<HTMLInputElement>('personal-key');
 const sample = { change: '岳飞得到了皇帝的全部信任', outcome: '南宋将会如何', case: 'yue-fei-1141' };
 const phases = { identify: '确定分岔点', evidence: '查找史料', model: '建立模型', check: '校验并复算' };
 const publicApi = (import.meta.env.VITE_RESEARCH_API_ORIGIN || '').trim().replace(/\/+$/, '');
@@ -535,17 +537,21 @@ function progressView() {
   };
 }
 
+class PublicResearchUnavailable extends Error {}
+
 async function readResearch(response: Response, onProgress: (event: ResearchProgress) => void): Promise<unknown> {
   if (!response.ok || !response.headers.get('content-type')?.includes('application/x-ndjson')) {
     const data: unknown = await response.json().catch(() => null);
     if (!response.ok || !data) {
-      const details = data as { error?: string; resetAt?: string } | null;
-      const message = details?.error ?? '分析服务暂时不可用，请稍后重试。';
+      const details = data as { error?: string; resetAt?: string; canUseOwnKey?: boolean } | null;
+      let message = details?.error ?? '分析服务暂时不可用，请稍后重试。';
       const reset = typeof details?.resetAt === 'string' ? Date.parse(details.resetAt) : NaN;
       if (response.status === 429 && Number.isFinite(reset)) {
         const time = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(reset);
-        throw new Error(message + '额度将在 ' + time + '（本地时间）恢复，案例仍可复算。');
+        message += '额度将在 ' + time + '（本地时间）恢复。';
+        throw new PublicResearchUnavailable(message);
       }
+      if (details?.canUseOwnKey) throw new PublicResearchUnavailable(message);
       throw new Error(message);
     }
     return data;
@@ -564,9 +570,12 @@ async function readResearch(response: Response, onProgress: (event: ResearchProg
         if (!line.trim()) continue;
         const record = JSON.parse(line) as
           { type: 'progress'; progress: ResearchProgress } |
-          { type: 'result'; bundle: unknown } | { type: 'error'; error: string };
+          { type: 'result'; bundle: unknown } | { type: 'error'; error: string; canUseOwnKey?: boolean };
         if (record.type === 'progress') onProgress(record.progress);
-        if (record.type === 'error') throw new Error(record.error);
+        if (record.type === 'error') {
+          if (record.canUseOwnKey) throw new PublicResearchUnavailable(record.error);
+          throw new Error(record.error);
+        }
         if (record.type === 'result') return record.bundle;
       }
     }
@@ -586,25 +595,50 @@ form.addEventListener('submit', async (event) => {
     say('这道新题需要自托管版。公开页可以先用岳飞示例查看推演过程。');
     return;
   }
+  const useOwnKey = Boolean(publicApi && personalKeyPanel.open);
+  const key = useOwnKey ? personalKeyInput.value.trim() : '';
+  if (useOwnKey && !key) {
+    say('请输入你的 DeepSeek API Key，或收起密钥选项使用公共额度。');
+    personalKeyInput.focus();
+    return;
+  }
   const operationId = ++operation;
   researchButton.disabled = true;
   say();
   const track = progressView();
   track({ phase: 'identify', detail: '正在提交历史问题。' });
   try {
-    const response = await fetch(apiUrl('/api/research'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+    const response = await fetch(apiUrl(key ? '/api/research/personal' : '/api/research'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson',
+        ...(key ? { Authorization: 'Bearer ' + key } : {}) },
+      ...(key ? { credentials: 'omit' as const, redirect: 'error' as const } : {}),
       body: JSON.stringify({ question: prompt }),
     });
     const data = await readResearch(response, (event) => { if (operationId === operation) track(event); });
     if (operationId === operation) { setBundle(data); say(); }
   } catch (error) {
-    if (operationId === operation) { progressPanel.hidden = true; say(errorText(error)); }
+    if (operationId === operation) {
+      progressPanel.hidden = true;
+      if (publicApi && !useOwnKey && error instanceof PublicResearchUnavailable) {
+        say(error.message + '填入自己的 DeepSeek API Key 即可继续推演。');
+        personalKeyPanel.open = true;
+        personalKeyInput.focus();
+      } else {
+        say(errorText(error));
+      }
+    }
   } finally { researchButton.disabled = false; }
 });
 
 if (publicApi) {
-  enableResearch('可在线推演自拟历史主题。公开服务有每日用量上限，示例可直接复算。');
+  enableResearch('可在线推演自拟历史主题。公共额度用完后，可用自己的 DeepSeek API Key 继续。');
+  personalKeyPanel.hidden = false;
+  personalKeyPanel.addEventListener('toggle', () => {
+    if (!personalKeyPanel.open) personalKeyInput.value = '';
+    researchButton.textContent = personalKeyPanel.open ? '用我的密钥推演 →' : '开始推演 →';
+  });
+  window.addEventListener('pagehide', () => { personalKeyInput.value = ''; });
 } else if (import.meta.env.VITE_DEMO_ONLY !== 'true') {
   void fetch('/api/status').then(async (response) => {
     if (!response.ok) return;

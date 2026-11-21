@@ -1,5 +1,5 @@
 import { load } from 'cheerio/slim';
-import { configureHttpProviders, normalizeText, userAgent } from './provider-core.ts';
+import { configureHttpProviders, ModelProviderError, normalizeText, userAgent } from './provider-core.ts';
 import type { Page, Providers } from './provider-core.ts';
 import { research } from './research.ts';
 import { requestSchema } from './schema.ts';
@@ -139,13 +139,22 @@ export async function reserveRun(env: PublicEnvironment, request: Request, now =
   };
 }
 
-export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSignal) => Providers = (env, signal) => configureHttpProviders({
+const personalKeyErrors: Record<number, string> = {
+  401: 'DeepSeek 未接受此 API Key，请检查密钥是否正确或已被撤销。',
+  402: '你的 DeepSeek 账户余额不足，请检查余额后再试。',
+  403: '此 DeepSeek API Key 无权使用当前模型。',
+  429: '你的 DeepSeek 账户请求过于频繁，请稍后再试。',
+};
+
+export function publicFetch(provide: (key: string, model: string | undefined, signal: AbortSignal) => Providers =
+  (key, model, signal) => configureHttpProviders({
   OPENAI_BASE_URL: 'https://api.deepseek.com',
-  OPENAI_API_KEY: env.DEEPSEEK_API_KEY,
-  OPENAI_MODEL: env.DEEPSEEK_MODEL || 'deepseek-flash',
+  OPENAI_API_KEY: key,
+  OPENAI_MODEL: model || 'deepseek-flash',
 }, (url) => readArchive(url, signal), signal)) {
   return async (request: Request, env: PublicEnvironment): Promise<Response> => {
     const route = new URL(request.url);
+    const useOwnKey = route.pathname === '/api/research/personal';
     const origin = request.headers.get('Origin');
     const cors = new Headers({ Vary: 'Origin', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     if (origin === siteOrigin) cors.set('Access-Control-Allow-Origin', siteOrigin);
@@ -154,9 +163,9 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
     });
     if (route.pathname === '/' && request.method === 'GET') return Response.redirect(siteUrl, 302);
     if (origin && origin !== siteOrigin) return send({ error: '请从历史改写公开页发起请求。' }, 403);
-    if (request.method === 'OPTIONS' && ['/api/status', '/api/research'].includes(route.pathname)) {
+    if (request.method === 'OPTIONS' && (useOwnKey || ['/api/status', '/api/research'].includes(route.pathname))) {
       cors.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      cors.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+      cors.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
       cors.set('Access-Control-Max-Age', '600');
       return new Response(null, { status: 204, headers: cors });
     }
@@ -168,9 +177,13 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
         return send({ mode: 'public', ready: true, quota });
       } catch { return send({ mode: 'public', ready: false }, 503); }
     }
-    if (route.pathname !== '/api/research' || request.method !== 'POST') return send({ error: 'Not found' }, 404);
+    if ((!useOwnKey && route.pathname !== '/api/research') || request.method !== 'POST') return send({ error: 'Not found' }, 404);
     if (origin !== siteOrigin) return send({ error: '请从历史改写公开页发起请求。' }, 403);
-    if (!ready) return send({ error: '公开推演服务正在准备，请稍后再试。' }, 503);
+    const authorization = request.headers.get('Authorization');
+    const personalKey = authorization?.match(/^Bearer ([A-Za-z0-9._~+/-]{12,512}={0,2})$/i)?.[1];
+    if (useOwnKey && !personalKey) return send({ error: '请检查填写的 DeepSeek API Key。' }, 400);
+    if (!useOwnKey && authorization !== null) return send({ error: '请使用个人密钥推演入口。' }, 400);
+    if (!personalKey && !ready) return send({ error: '公共推演暂不可用。', canUseOwnKey: true }, 503);
     if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') ?? '')) {
       return send({ error: '需要 JSON 请求。' }, 415);
     }
@@ -200,13 +213,16 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
     const question = requestSchema.safeParse(data);
     if (!question.success) return send({ error: '请填写一句历史问题。' }, 400);
 
-    try {
-      const quota = await reserveRun(env, request);
-      if (!quota.allowed) {
-        const error = quota.scope === 'global' ? '今天的全站推演额度已用完。' : '当前网络今天的推演额度已用完。';
-        return send({ error, scope: quota.scope, resetAt: quota.resetAt }, 429, { 'Retry-After': String(quota.retryAfter) });
-      }
-    } catch { return send({ error: '公开服务的用量控制暂不可用，请稍后重试。' }, 503); }
+    if (!personalKey) {
+      try {
+        const quota = await reserveRun(env, request);
+        if (!quota.allowed) {
+          const error = quota.scope === 'global' ? '今天的全站推演额度已用完。' : '当前网络今天的推演额度已用完。';
+          return send({ error, scope: quota.scope, resetAt: quota.resetAt, canUseOwnKey: true }, 429,
+            { 'Retry-After': String(quota.retryAfter) });
+        }
+      } catch { return send({ error: '公共额度暂时无法核对。', canUseOwnKey: true }, 503); }
+    }
 
     const body = new TransformStream<Uint8Array>();
     const writer = body.writable.getWriter();
@@ -217,11 +233,17 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
       writer.write(encoder.encode(JSON.stringify(event) + '\n')).catch(() => cancellation.abort());
     void (async () => {
       try {
-        const bundle = await research(question.data, provide(env, signal), undefined,
+        const key = personalKey ?? env.DEEPSEEK_API_KEY!;
+        const bundle = await research(question.data, provide(key, env.DEEPSEEK_MODEL, signal), undefined,
           (progress) => { void emit({ type: 'progress', progress }); });
         await emit({ type: 'result', bundle });
-      } catch {
-        await emit({ type: 'error', error: '暂时无法完成该问题的史料检索或建模，请稍后重试。' });
+      } catch (error) {
+        if (error instanceof ModelProviderError && error.needsAccountAction) {
+          await emit({ type: 'error', error: personalKey ? personalKeyErrors[error.status] : '公共推演的模型暂不可用。',
+            canUseOwnKey: !personalKey });
+        } else {
+          await emit({ type: 'error', error: '暂时无法完成该问题的史料检索或建模，请稍后重试。' });
+        }
       } finally { await writer.close().catch(() => undefined); }
     })();
     cors.set('Content-Type', 'application/x-ndjson; charset=utf-8');

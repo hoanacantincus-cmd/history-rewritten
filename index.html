@@ -36,6 +36,13 @@
                 <span class="question-punctuation" aria-hidden="true">？</span>
               </div>
             </div>
+            <details id="personal-key-panel" class="personal-key" hidden>
+              <summary>使用自己的 DeepSeek API Key</summary>
+              <label for="personal-key">DeepSeek API Key</label>
+              <input id="personal-key" type="password" autocomplete="off" spellcheck="false" maxlength="514"
+                aria-describedby="personal-key-note" placeholder="粘贴 DeepSeek API Key" />
+              <p id="personal-key-note">使用你的 DeepSeek 账户计费，不占公共额度。密钥仅用于本页请求，收起或离开页面即清除。<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">获取 API Key ↗</a></p>
+            </details>
             <div class="action-row">
               <button class="button primary" type="submit" id="research-button">预览推演 <span aria-hidden="true">→</span></button>
               <button class="button secondary" type="button" id="sample-question">填入岳飞示例</button>

@@ -53,6 +53,13 @@ textarea { width: 100%; line-height: 1.6; resize: vertical; min-height: 66px; }
 .question-input { display: grid; gap: 8px; margin-bottom: 14px; }
 .question-clause { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .question-clause input { width: 100%; min-width: 0; min-height: 47px; padding: 10px 13px; background: var(--bright); border: 1px solid #d4c9b9; border-radius: 8px; }
+.personal-key { margin-bottom: 14px; font-size: 13px; }
+.personal-key summary { color: var(--accent-dark); font-weight: 700; }
+.personal-key[open] { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bright); }
+.personal-key label { display: block; margin: 12px 0 6px; font-weight: 700; }
+.personal-key input { width: 100%; padding: 10px 12px; border: 1px solid #d4c9b9; border-radius: 7px; background: var(--bright); }
+.personal-key p { color: var(--muted); margin-top: 8px; line-height: 1.65; }
+.personal-key a { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
 .question-punctuation, .if-prefix { font-weight: 800; color: var(--accent-dark); }
 .question-punctuation:first-child { text-align: end; }
 summary { cursor: pointer; }

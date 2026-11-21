@@ -8,6 +8,7 @@ import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
 import { simulate } from '../src/engine.ts';
 import { createApp } from '../src/server.ts';
+import { ModelProviderError } from '../src/provider-core.ts';
 import { publicFetch, reserveRun } from '../src/public-worker.ts';
 import type { PublicEnvironment } from '../src/public-worker.ts';
 
@@ -283,4 +284,65 @@ test('public quota recovery preserves remaining shared capacity and explains the
   assert.equal(error.scope, 'global');
   assert.ok(Date.parse(error.resetAt) > Date.now());
   assert.equal((await (await status()).json()).quota.networkRemaining, null);
+});
+
+test('a visitor key bypasses the public budget and is never replaced with the owner key', async (t) => {
+  const visitorKey = 'sk-fixture-visitor-0001';
+  const env = { DB: publicTestDb(t), DEEPSEEK_API_KEY: 'sk-fixture-owner-00001', PUBLIC_DAILY_LIMIT: '1' };
+  const calls: string[] = [];
+  const fetch = publicFetch((key) => {
+    calls.push(key);
+    return providers(modeled('Personal-key replay'));
+  });
+  const request = () => publicRequest('198.51.100.1');
+  const signed = async (key?: string) => {
+    const base = request();
+    if (key !== undefined) base.headers.set('Authorization', 'Bearer ' + key);
+    return new Request(publicApiUrl + '/personal', { method: 'POST', headers: base.headers, body: await base.text() });
+  };
+  const preflight = await fetch(new Request(publicApiUrl + '/personal', {
+    method: 'OPTIONS', headers: { Origin: publishedOrigin, 'Access-Control-Request-Headers': 'authorization,content-type' },
+  }), env);
+  assert.equal(preflight.status, 204);
+  assert.match(preflight.headers.get('Access-Control-Allow-Headers') ?? '', /Authorization/i);
+
+  assert.equal((await fetch(await signed(), env)).status, 400);
+  assert.equal((await fetch(await signed('invalid key'), env)).status, 400);
+  assert.equal(calls.length, 0);
+  const personalFirst = await fetch(await signed(visitorKey), {});
+  const document = await personalFirst.text();
+  assert.match(document, /"type":"result"/);
+  assert.ok(!document.includes(visitorKey));
+
+  await (await fetch(request(), env)).text();
+  const exhausted = await fetch(request(), env);
+  assert.equal(exhausted.status, 429);
+  assert.equal((await exhausted.json()).canUseOwnKey, true);
+
+  assert.match(await (await fetch(await signed(visitorKey), env)).text(), /"type":"result"/);
+  assert.deepEqual(calls, [visitorKey, env.DEEPSEEK_API_KEY, visitorKey]);
+});
+
+test('a rejected personal key surfaces the provider error and never uses the public account', async () => {
+  const requestedKey = 'sk-fixture-rejected-0001';
+  let completions = 0;
+  const fetch = publicFetch((key) => {
+    assert.equal(key, requestedKey);
+    const driver = providers(modeled('Rejected'));
+    const complete = driver.complete;
+    driver.complete = async (...parameters) => {
+      completions++;
+      if (completions === 2) throw new ModelProviderError(402);
+      return complete(...parameters);
+    };
+    return driver;
+  });
+  const response = await fetch(new Request(publicApiUrl + '/personal', {
+    method: 'POST', headers: { Origin: publishedOrigin, 'Content-Type': 'application/json', Authorization: 'Bearer ' + requestedKey },
+    body: JSON.stringify({ question: '如果独立公投延后会怎样？' }),
+  }), {});
+  const text = await response.text();
+  assert.match(text, /你的 DeepSeek 账户余额不足/);
+  assert.ok(!text.includes(requestedKey) && !text.includes('"type":"result"'));
+  assert.equal(completions, 2);
 });

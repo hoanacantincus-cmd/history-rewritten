@@ -7,6 +7,19 @@ export type Providers = {
   complete(instructions: string, data: string, schema?: Record<string, unknown>): Promise<unknown>;
 };
 
+export class ModelProviderError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super('Model provider returned HTTP ' + status);
+    this.status = status;
+  }
+
+  get needsAccountAction() {
+    return [401, 402, 403, 429].includes(this.status);
+  }
+}
+
 export const userAgent = 'HistoryRewritten/0.1 (https://github.com/hoanacantincus-cmd/history-rewritten)';
 export const normalizeText = (text: string) => text.normalize('NFC').replace(/\s+/gu, ' ').trim();
 
@@ -93,7 +106,7 @@ export function configureHttpProviders(env: Record<string, string | undefined>, 
       const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: 'Bearer ' + apiKey } : {}) };
       if (schema && isDeepSeek) {
         const response = await fetch(new URL('/responses', baseUrl), {
-          method: 'POST', headers, signal: deadline(120_000),
+          method: 'POST', headers, redirect: 'error', signal: deadline(120_000),
           body: JSON.stringify({
             model, instructions, input: data, reasoning: { effort: 'none' }, max_output_tokens: 8000,
             text: { format: { type: 'json_schema', name: 'historical_analysis', schema } },
@@ -112,7 +125,7 @@ export function configureHttpProviders(env: Record<string, string | undefined>, 
         }
         await response.body?.cancel();
         if (response.status !== 400 && response.status !== 404) {
-          throw new Error('DeepSeek structured model returned HTTP ' + response.status);
+          throw new ModelProviderError(response.status);
         }
       }
       const response = await fetch(baseUrl + '/chat/completions', {
@@ -123,9 +136,12 @@ export function configureHttpProviders(env: Record<string, string | undefined>, 
           response_format: { type: 'json_object' },
           ...(isDeepSeek ? { thinking: { type: 'disabled' }, max_tokens: 6000 } : {}),
         }),
-        signal: deadline(90_000),
+        redirect: isDeepSeek ? 'error' : 'follow', signal: deadline(90_000),
       });
-      if (!response.ok) throw new Error('Model provider returned HTTP ' + response.status);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new ModelProviderError(response.status);
+      }
       const dataObject = await response.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> };
       if (dataObject.choices?.[0]?.finish_reason === 'length') throw new Error('Model response exceeded its output limit');
       const output = dataObject.choices?.[0]?.message?.content;
