@@ -28,6 +28,9 @@ const modelPrompt = [
   'Return insufficient only if the event, historical decision or a plausible causal mechanism cannot be grounded. Use model:null, specific gaps and whatever claims can be supported.',
   'When ready, include a sourced decision point, a factual baseline as the first branch, and at least one feasible alternative. All branches change values of the same single decision field.',
   'Rules are ordered and run at integral steps starting at 1. All rules read the previous state; the first applicable rule per target wins. Only state can be updated by rules.',
+  'For when, value and utility, write only a JSON literal, {"ref":"field-id"}, or {"op":"eq","args":[{"ref":"field-id"},true]}. A complete example rule is {"id":"r-delay","label":"Delay the vote","target":"vote-timing","start":1,"until":1,"when":{"ref":"delay"},"value":"later","basis":["c-assumption"]}. Use an existing field ID or an exact category from its values.',
+  'The only operators are and, or, not, eq, lt, lte, gt, gte, add, sub, mul, div. Each takes exactly two arguments except not which takes one. Do not use neq, if, in, formula strings or object keys other than ref or op and args. Use literal true for unconditional rules. Nest operators at most three levels.',
+  'For a multi-condition rule use {"op":"and","args":[{"ref":"delay"},{"op":"eq","args":[{"ref":"support"},"high"]}]}. A numeric example is {"op":"add","args":[{"ref":"cash"},10]}. Prefer literal values and simple conditions.',
   'Numbers need explicit units; use "1" for fractions. Multiply quantities by dimensionless factors; add or compare matching units. Include min/max when there are hard bounds.',
   'Parameters may vary by scenario but are identical across decisions within that scenario. Use null for unknown, especially for an outcome that has not yet been determined.',
   'Use the actor and visibility fields to ensure actors respond only to information they could have received. A field with no visibility map is public; missing actors in a map cannot see it.',
@@ -162,12 +165,14 @@ export async function research(
   const schema = draftJsonSchema();
   const instructions = modelPrompt + '\nSCHEMA\n' + JSON.stringify(schema);
   const textById = new Map(records.map((item) => [item.source.id, item.text]));
+  const compactModel = '\nIf possible, repair the last validation issue with a smaller model: one measured outcome, 3–6 fields, two decisions, one or two scenarios and 2–5 short rules. Include relevant actors and mark unresolved factors explicitly. Prefer boolean or categorical state and simple when conditions. Do not reuse a rule that violates the schema.';
   let repair = '';
   let grounded: Draft | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const raw = await providers.complete(
-        instructions, JSON.stringify({ ...modelData, ...(repair ? { previousValidationError: repair } : {}) }),
+        attempt ? instructions + compactModel : instructions,
+        JSON.stringify({ ...modelData, ...(repair ? { previousValidationError: repair } : {}) }),
         schema,
       );
       normalizeDraft(raw);
