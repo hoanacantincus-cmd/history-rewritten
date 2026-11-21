@@ -106,7 +106,7 @@ export function configureHttpProviders(env: Record<string, string | undefined>, 
       const headers = { 'content-type': 'application/json', ...(apiKey ? { authorization: 'Bearer ' + apiKey } : {}) };
       if (schema && isDeepSeek) {
         const response = await fetch(new URL('/responses', baseUrl), {
-          method: 'POST', headers, redirect: 'error', signal: deadline(120_000),
+          method: 'POST', headers, redirect: 'manual', signal: deadline(120_000),
           body: JSON.stringify({
             model, instructions, input: data, reasoning: { effort: 'none' }, max_output_tokens: 8000,
             text: { format: { type: 'json_schema', name: 'historical_analysis', schema } },
@@ -136,7 +136,7 @@ export function configureHttpProviders(env: Record<string, string | undefined>, 
           response_format: { type: 'json_object' },
           ...(isDeepSeek ? { thinking: { type: 'disabled' }, max_tokens: 6000 } : {}),
         }),
-        redirect: isDeepSeek ? 'error' : 'follow', signal: deadline(90_000),
+        redirect: isDeepSeek ? 'manual' : 'follow', signal: deadline(90_000),
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);

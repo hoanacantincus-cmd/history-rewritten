@@ -8,7 +8,7 @@ import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
 import { simulate } from '../src/engine.ts';
 import { createApp } from '../src/server.ts';
-import { ModelProviderError } from '../src/provider-core.ts';
+import { configureHttpProviders, ModelProviderError } from '../src/provider-core.ts';
 import { publicFetch, reserveRun } from '../src/public-worker.ts';
 import type { PublicEnvironment } from '../src/public-worker.ts';
 
@@ -345,4 +345,20 @@ test('a rejected personal key surfaces the provider error and never uses the pub
   assert.match(text, /你的 DeepSeek 账户余额不足/);
   assert.ok(!text.includes(requestedKey) && !text.includes('"type":"result"'));
   assert.equal(completions, 2);
+});
+
+test('DeepSeek provider rejects redirects without forwarding the bearer token', async (t) => {
+  const key = 'sk-fixture-redirect-0001';
+  const seen: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: URL | string, init: RequestInit) => {
+    seen.push(String(url));
+    assert.equal(init.redirect, 'manual');
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer ' + key);
+    return new Response(null, { status: 307, headers: { Location: 'https://foreign.example/chat/completions' } });
+  });
+  const driver = configureHttpProviders({ OPENAI_BASE_URL: 'https://api.deepseek.com',
+    OPENAI_MODEL: 'deepseek-flash', OPENAI_API_KEY: key }, async () => { throw new Error('Unexpected source read'); });
+  await assert.rejects(driver.complete('Return JSON', '{}'), ModelProviderError);
+  await assert.rejects(driver.complete('Return JSON', '{}', {}), ModelProviderError);
+  assert.deepEqual(seen, ['https://api.deepseek.com/chat/completions', 'https://api.deepseek.com/responses']);
 });
