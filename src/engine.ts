@@ -57,6 +57,7 @@ export type ForecastResult = {
   observations: number | null;
   unknownMass: number | null;
   unclassifiedScenarios: string[];
+  baseline: 'consistent' | 'disagrees' | 'unresolved' | 'unavailable';
   outcomes: {
     label: string;
     scenarios: string[];
@@ -69,8 +70,13 @@ function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScena
   if (!forecast) return null;
   const field = model.variables.find(({ id }) => id === model.metrics.find(({ id }) => id === forecast.metric)!.field)!;
   const alternatives = runs.filter((run) => run.decision === forecast.decision);
+  const actual = forecast.baselineCheck;
+  const historical = runs.filter(({ decision }) => decision === model.decisions[0].id)
+    .map(({ metrics }) => metrics[forecast.metric]);
+  const baseline = !actual || !fullWindow || !allScenarios ? 'unavailable' :
+    historical.includes(actual.value) ? 'consistent' : historical.includes(null) ? 'unresolved' : 'disagrees';
   // A partial horizon or filtered scenario cannot be treated as the registered population.
-  const weights = fullWindow && allScenarios ? forecast.weights : undefined;
+  const weights = fullWindow && allScenarios && baseline !== 'disagrees' && baseline !== 'unresolved' ? forecast.weights : undefined;
   const counts = new Map(weights?.counts.map(({ scenario, count }) => [scenario, count]));
   const observations = weights?.counts.reduce((sum, { count }) => sum + count, 0) ?? null;
   const unclassifiedScenarios = alternatives.filter((run) => run.metrics[forecast.metric] === null).map(({ scenario }) => scenario);
@@ -79,7 +85,7 @@ function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScena
     ? [{ value: true, label: '是' }, { value: false, label: '否' }]
     : field.values!.map((value) => ({ value, label: value }));
   return {
-    decision: forecast.decision, outcome: forecast.metric, observations, unclassifiedScenarios,
+    decision: forecast.decision, outcome: forecast.metric, observations, unclassifiedScenarios, baseline,
     unknownMass: observations ? unknown / observations : null,
     outcomes: possible.map(({ value, label }) => {
       const scenarios = alternatives.filter((run) => run.metrics[forecast.metric] === value).map(({ scenario }) => scenario);

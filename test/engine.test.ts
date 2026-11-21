@@ -67,6 +67,10 @@ test('forecast probabilities use source counts and keep unclassified mass visibl
   assert.equal(forecast.observations, 104);
   assert.deepEqual(forecast.outcomes.map(({ probability }) => probability?.lower), [57 / 104, 47 / 104]);
   assert.equal(simulate(data, { scenario: 'draw-support' }).forecast?.observations, null);
+  const mismatch = structuredClone(data);
+  mismatch.model!.forecast!.baselineCheck = { value: '当天未达到九州门槛', basis: ['vote'] };
+  assert.equal(simulate(mismatch).forecast?.baseline, 'disagrees');
+  assert.equal(simulate(mismatch).forecast?.observations, null);
   data.model!.rules[2].value = null;
   const partial = simulate(data).forecast!;
   assert.equal(partial.unknownMass, 47 / 104);

@@ -236,6 +236,10 @@
     "forecast": {
       "decision": "draw",
       "metric": "outcome",
+      "baselineCheck": {
+        "value": "当天达到九州门槛",
+        "basis": ["vote", "threshold"]
+      },
       "factors": [
         {
           "kind": "internal",

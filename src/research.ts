@@ -32,6 +32,7 @@ const modelPrompt = [
   'Use the actor and visibility fields to ensure actors respond only to information they could have received. A field with no visibility map is public; missing actors in a map cannot see it.',
   'For strategic interactions define separate agents with feasible actions and dimensionless utilities in model.policies. Policy targets are boolean or categorical state fields separate from ordinary rule targets. Each policy chooses the best supported action against the previous state. Document every payoff as evidence or an explicit assumption; unknown or tied choices stay unresolved.',
   'For a ready model include forecast with the requested non-baseline decision, one categorical or boolean outcome metric, and four factor assessments: internal, external, strategy, weather. Mark factors modeled, unresolved, or irrelevant and cite their rationale. For modeled factors list the fields that actually represent them.',
+  'If the factual outcome of the forecast metric is recorded over the same window, set forecast.baselineCheck with that exact outcome value and a supported claim ID. It is used only to check the simulated baseline. It does not feed the rules.',
   'Do not predict precise historical weather from modern averages. Distinguish dated reports, reanalysis, and unweighted weather scenarios. If a relevant factor is unavailable, surface that as unknown or an explicit assumption.',
   'Omit forecast.weights unless a historical source records actual counts for EACH disjoint joint scenario, or documents a random mechanism with verifiable counts of equiprobable outcomes. Each count must appear as digits in the supporting quote. State why those counts transfer to this intervention. Do not invent priors, percentages, or equal weights as a default.',
   'Scope tightly using available evidence. Aim for 6–12 claims, up to five relevant agents and up to 20 rules. Output a single JSON object only.',
@@ -175,6 +176,8 @@ export async function research(input: unknown, providers: Providers, accessed = 
         }
       }
       const claims = new Map(draft.claims.map((claim) => [claim.id, claim]));
+      const check = draft.model?.forecast?.baselineCheck;
+      if (check && !check.basis.some((ref) => claims.get(ref)?.status === 'supported')) delete draft.model?.forecast?.baselineCheck;
       draft.timeline = draft.timeline.filter((event) => event.basis.every((ref) => claims.has(ref)) &&
         event.basis.some((ref) => ['supported', 'disputed'].includes(claims.get(ref)!.status)));
       if (quoteErrors.length && !draft.claims.some((claim) => claim.status === 'supported')) throw new Error(quoteErrors[0]);

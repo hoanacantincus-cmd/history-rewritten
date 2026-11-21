@@ -300,6 +300,12 @@ function drawForecast(bundle: Bundle, horizon?: number) {
   const section = el('section', 'monitor');
   section.append(el('h3', undefined, forecast.observations ? '可能走向与模型概率' : '可能走向'));
   section.append(el('p', 'model-note', model.metrics.find(({ id }) => id === spec.metric)!.label));
+  if (forecast.baseline === 'disagrees' || forecast.baseline === 'unresolved') {
+    const notice = el('p', 'model-note', forecast.baseline === 'disagrees'
+      ? '模拟基线与史实冲突，结果需要复核。' : '模拟基线有待判定，暂不展示概率。');
+    notice.append(references(bundle, spec.baselineCheck!.basis));
+    section.append(notice);
+  }
   const grid = el('div', 'forecast-grid');
   const names = new Map(model.scenarios.map(({ id, label }) => [id, label]));
   const outcomes = [...forecast.outcomes].sort((a, b) => (b.probability?.lower ?? 0) - (a.probability?.lower ?? 0));

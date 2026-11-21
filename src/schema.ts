@@ -56,6 +56,7 @@ const policySchema = z.strictObject({
 const factorKinds = ['internal', 'external', 'strategy', 'weather'] as const;
 const forecastSchema = z.strictObject({
   decision: id, metric: id,
+  baselineCheck: z.strictObject({ value: z.union([z.boolean(), label.max(100)]), basis }).optional(),
   factors: z.array(z.strictObject({
     kind: z.enum(factorKinds), status: z.enum(['modeled', 'unresolved', 'irrelevant']),
     explanation: prose, basis, variables: z.array(id).max(12),
@@ -283,6 +284,10 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
     if (new Set(forecast.factors.map(({ kind }) => kind)).size !== factorKinds.length) {
       throw new Error('Forecast factors must cover internal, external, strategy and weather once each');
     }
+    if (forecast.baselineCheck) {
+      if (!valueFits(forecast.baselineCheck.value, field)) throw new Error('Baseline check has an invalid value');
+      checkBasis(forecast.baselineCheck.basis, 'model.forecast.baselineCheck');
+    }
     for (const factor of forecast.factors) {
       if (factor.variables.some((fieldId) => !fields.has(fieldId)) || (factor.status === 'modeled' && !factor.variables.length)) {
         throw new Error('Forecast factor ' + factor.kind + ' must refer to its model fields');
@@ -351,6 +356,10 @@ export function parseBundle(input: unknown): Bundle {
             .map((number) => Number(number.replaceAll(',', ''))));
       });
       if (!counts.includes(weight.count)) throw new ForecastEvidenceError('Forecast count requires a matching cited observation: ' + weight.scenario);
+    }
+    const baselineCheck = bundle.model.forecast?.baselineCheck;
+    if (baselineCheck && !baselineCheck.basis.some((ref) => claims.get(ref)?.status === 'supported')) {
+      throw new Error('Baseline check needs a sourced observation');
     }
   } else if (bundle.status === 'ready' || bundle.model) {
     throw new Error('Only ready bundles can contain a model, and ready bundles must contain one');
