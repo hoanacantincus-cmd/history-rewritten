@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:worker": "vite build --config vite.worker.config.ts",
     "start": "node --env-file-if-exists=.env src/server.ts",
     "research": "node --env-file-if-exists=.env src/cli.ts research",
     "simulate": "node src/cli.ts simulate",

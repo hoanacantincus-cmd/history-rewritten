@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { draftJsonSchema, draftSchema, ForecastEvidenceError, parseBundle, requestSchema } from './schema.ts';
 import type { Bundle, Draft, ResearchRequest, Source } from './schema.ts';
-import { normalizeText } from './providers.ts';
-import type { Page, Providers } from './providers.ts';
+import { normalizeText } from './provider-core.ts';
+import type { Page, Providers } from './provider-core.ts';
 import type { ResearchProgress } from './research-progress.ts';
 
 const term = z.string().trim().min(1).max(250);

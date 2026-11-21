@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { research } from '../src/research.ts';
 import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
 import { simulate } from '../src/engine.ts';
 import { createApp } from '../src/server.ts';
+import { publicFetch, reserveRun } from '../src/public-worker.ts';
+import type { PublicEnvironment } from '../src/public-worker.ts';
 
 const quote = 'Recorded decision in a synthetic test transcript.';
 const sourceUrl = 'https://archive.example/record';
@@ -183,4 +187,62 @@ test('HTTP streams the current research phase before modeling finishes and ends 
     server.closeAllConnections();
     server.close();
   }
+});
+
+const publishedOrigin = 'https://hoanacantincus-cmd.github.io';
+const publicApiUrl = 'https://worker.example/api/research';
+
+function publicTestDb(t: import('node:test').TestContext): PublicEnvironment['DB'] {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(readFileSync(new URL('../drizzle/0000_public_runs.sql', import.meta.url), 'utf8'));
+  return {
+    prepare(sql) {
+      const statement = db.prepare(sql);
+      return {
+        bind(...values) {
+          const named = Object.fromEntries(values.map((value, index) => ['?' + (index + 1), value]));
+          return { async first<T>() { return (statement.get(named) ?? null) as T | null; } };
+        },
+      };
+    },
+  };
+}
+
+function publicRequest(ip: string, origin = publishedOrigin, body: unknown = { question: '如果 1905 年挪威推迟独立公投，之后会怎样？' }) {
+  return new Request(publicApiUrl, {
+    method: 'POST', headers: { Origin: origin, 'CF-Connecting-IP': ip, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('public client and shared quotas are enforced by the same SQLite statement', async (t) => {
+  const env = { DB: publicTestDb(t), PUBLIC_DAILY_LIMIT: '2', PUBLIC_CLIENT_DAILY_LIMIT: '1' };
+  const now = new Date('2026-11-21T23:59:50Z');
+  const a = () => publicRequest('198.51.100.1');
+  assert.deepEqual((await Promise.all([reserveRun(env, a(), now), reserveRun(env, a(), now)])).map((item) => item.allowed).sort(), [false, true]);
+  assert.equal((await reserveRun(env, publicRequest('198.51.100.2'), now)).allowed, true);
+  assert.deepEqual(await reserveRun(env, publicRequest('198.51.100.3'), now), { allowed: false, retryAfter: 10 });
+  assert.equal((await reserveRun(env, a(), new Date('2026-11-22T00:00:00Z'))).allowed, true);
+});
+
+test('public endpoint accepts a custom question from Pages and streams validated research', async (t) => {
+  const env = { DB: publicTestDb(t), DEEPSEEK_API_KEY: 'fixture', PUBLIC_CLIENT_DAILY_LIMIT: '1' };
+  const fetch = publicFetch(() => providers(modeled('Custom Norwegian referendum')));
+  const preflight = await fetch(new Request(publicApiUrl, { method: 'OPTIONS', headers: { Origin: publishedOrigin } }), env);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), publishedOrigin);
+  assert.equal((await fetch(publicRequest('198.51.100.1', 'https://foreign.example'), env)).status, 403);
+  assert.equal((await fetch(publicRequest('198.51.100.1', publishedOrigin, { question: 'an unfamiliar question', sources: [] }), env)).status, 400);
+
+  const response = await fetch(publicRequest('198.51.100.1'), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), publishedOrigin);
+  const records = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(records.filter((row) => row.type === 'progress').map((row) => row.progress.phase), ['identify', 'evidence', 'model', 'check']);
+  assert.equal(records.at(-1).type, 'result');
+  assert.equal(records.at(-1).bundle.status, 'ready');
+  const capped = await fetch(publicRequest('198.51.100.1'), env);
+  assert.equal(capped.status, 429);
+  assert(Number(capped.headers.get('Retry-After')) > 0);
 });

@@ -19,7 +19,15 @@ const input = byId<HTMLInputElement>('import');
 const researchButton = byId<HTMLButtonElement>('research-button');
 const sample = { change: '岳飞得到了皇帝的全部信任', outcome: '南宋将会如何', case: 'yue-fei-1141' };
 const phases = { identify: '确定分岔点', evidence: '查找史料', model: '建立模型', check: '校验并复算' };
-let selfHosted = false;
+const publicApi = (import.meta.env.VITE_RESEARCH_API_ORIGIN || '').trim().replace(/\/+$/, '');
+const apiUrl = (path: string) => publicApi + path;
+let onlineResearch = Boolean(publicApi);
+
+function enableResearch(note: string) {
+  onlineResearch = true;
+  researchButton.textContent = '开始推演 →';
+  byId('mode-note').textContent = note;
+}
 let examplePrepared = false;
 let selectedDemo: string | undefined;
 let operation = 0;
@@ -529,8 +537,11 @@ function progressView() {
 
 async function readResearch(response: Response, onProgress: (event: ResearchProgress) => void): Promise<unknown> {
   if (!response.ok || !response.headers.get('content-type')?.includes('application/x-ndjson')) {
-    const data: unknown = await response.json();
-    if (!response.ok) throw new Error((data as { error?: string }).error ?? '分析服务暂时不可用。');
+    const data: unknown = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      const message = (data as { error?: string } | null)?.error;
+      throw new Error(message ?? '分析服务暂时不可用，请稍后重试。');
+    }
     return data;
   }
   if (!response.body) throw new Error('分析服务未返回推演记录。');
@@ -564,8 +575,8 @@ form.addEventListener('submit', async (event) => {
   if (!prompt) { say('请在「如果」后填入你想改变的历史条件。'); return; }
   const matchesSample = prompt === assembleQuestion(sample.change, sample.outcome) ||
     (!consequence.value.trim() && question.value.trim() === sample.change);
-  if (matchesSample && (examplePrepared || !selfHosted)) { void openCase(sample.case); return; }
-  if (!selfHosted) {
+  if (matchesSample && (examplePrepared || !onlineResearch)) { void openCase(sample.case); return; }
+  if (!onlineResearch) {
     say('这道新题需要自托管版。公开页可以先用岳飞示例查看推演过程。');
     return;
   }
@@ -575,7 +586,7 @@ form.addEventListener('submit', async (event) => {
   const track = progressView();
   track({ phase: 'identify', detail: '正在提交历史问题。' });
   try {
-    const response = await fetch('/api/research', {
+    const response = await fetch(apiUrl('/api/research'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify({ question: prompt }),
     });
@@ -586,13 +597,13 @@ form.addEventListener('submit', async (event) => {
   } finally { researchButton.disabled = false; }
 });
 
-if (import.meta.env.VITE_DEMO_ONLY !== 'true') {
+if (publicApi) {
+  enableResearch('可在线推演自拟历史主题。公开服务有每日用量上限，示例可直接复算。');
+} else if (import.meta.env.VITE_DEMO_ONLY !== 'true') {
   void fetch('/api/status').then(async (response) => {
     if (!response.ok) return;
     const data = await response.json() as { mode?: string };
     if (data.mode !== 'self-hosted') return;
-    selfHosted = true;
-    researchButton.textContent = '开始推演 →';
-    byId('mode-note').textContent = '研究在这台自托管服务上运行。导出的分析包可离线复算。';
+    enableResearch('研究在这台自托管服务上运行。导出的分析包可离线复算。');
   }).catch(() => { /* A static host renders the public demo. */ });
 }
