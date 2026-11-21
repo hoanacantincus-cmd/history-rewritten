@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { research } from '../src/research.ts';
 import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
-import { simulate } from '../src/engine.ts';
+import { exportAnalysis, simulate } from '../src/engine.ts';
+import type { Draft } from '../src/schema.ts';
 import { createApp } from '../src/server.ts';
 import { configureHttpProviders, ModelProviderError } from '../src/provider-core.ts';
 import { detectKeyProvider } from '../src/personal-models.ts';
@@ -51,8 +52,26 @@ function providers(reply: unknown, text = quote): Providers {
     async read(url) { return { url, title: 'Synthetic archival page', text }; },
     async complete(instructions, data) {
       const input = JSON.parse(data) as { question: string };
-      return instructions.startsWith('Return JSON with title')
-        ? { title: input.question, queries: [input.question] } : structuredClone(reply);
+      const draft = reply as Draft;
+      if (instructions.startsWith('Return JSON with title')) return { title: input.question, queries: [input.question] };
+      if (instructions.startsWith('Return JSON evidence dossier')) {
+        const input = JSON.parse(data) as { excerpts: { id: string; source: string; text: string }[] };
+        return { start: 'First phase', end: 'Last phase', interpretation: 'A bounded synthetic intervention',
+          claims: draft.claims.filter(({ citations }) => citations.length).map((claim) => ({
+            id: claim.id, text: claim.text, scope: claim.scope, when: 'Recorded date',
+            anchors: claim.citations.map((citation) => input.excerpts.find(({ source, text }) =>
+              source === citation.source && text.includes(citation.quote))?.id ?? 'unavailable-anchor'),
+          })),
+        };
+      }
+      if (instructions.startsWith('Return JSON evidence review')) {
+        const review = JSON.parse(data) as { claims: { claim: { id: string } }[] };
+        return { findings: review.claims.map(({ claim: { id } }) =>
+          ({ id, verdict: draft.claims.find((claim) => claim.id === id)?.status })) };
+      }
+      if (instructions.startsWith('Return JSON historical observations')) return { observations: [] };
+      if (instructions.startsWith('Return JSON intervention audit')) return { accepted: true, issues: [] };
+      return structuredClone(reply);
     },
   };
 }
@@ -100,12 +119,12 @@ test('cites only excerpts present in a fetched or submitted source', async () =>
   assert.equal(unverified.status, 'insufficient');
   assert.equal(unverified.claims.length, 0);
   assert.equal(unverified.sources.length, 1);
-  assert.match(unverified.gaps[1], /Exact quote not found/);
+  assert.match(unverified.gaps.join(' '), /未能通过原文或含义核对/);
   const driver = providers(modeled('Submitted'));
   driver.search = async () => { throw new Error('Search unavailable'); };
   const bundle = await research({ question: 'Submitted source', sources: [{ url: sourceUrl, excerpt: quote }] }, driver);
   assert.equal(bundle.sources[0].origin, 'user');
-  assert.match(bundle.gaps[0], /用户提供/);
+  assert.match(bundle.gaps.join(' '), /用户提供/);
 });
 
 test('source reading policy confines URLs to public standard HTTP(S) targets', async () => {
@@ -149,7 +168,7 @@ test('HTTP streams the current research phase before modeling finishes and ends 
   let finishModel!: () => void;
   const gate = new Promise<void>((resolve) => { finishModel = resolve; });
   driver.complete = async (instructions, data) => {
-    if (!instructions.startsWith('Return JSON with title')) await gate;
+    if (instructions.startsWith('Return one JSON object')) await gate;
     return complete(instructions, data);
   };
   const server = createApp(driver);
@@ -183,7 +202,8 @@ test('HTTP streams the current research phase before modeling finishes and ends 
     }
     const events = all.trim().split('\n').map((line) => JSON.parse(line));
     assert.equal(events.at(-2).progress.phase, 'simulate');
-    assert.equal(events.at(-2).progress.simulation.runs, 2);
+    assert.equal(events.find((item) => item.progress?.simulation)?.progress.simulation.runs, 2);
+    assert.ok(events.some((item) => item.progress?.round?.branch === 'change'));
     assert.equal(events.at(-1).type, 'result');
     assert.equal(simulate(events.at(-1).bundle).status, 'ready');
   } finally {
@@ -243,7 +263,7 @@ test('public endpoint accepts a custom question from Pages and streams validated
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), publishedOrigin);
   const records = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
-  assert.deepEqual(records.filter((row) => row.type === 'progress').map((row) => row.progress.phase), ['identify', 'evidence', 'model', 'check', 'simulate']);
+  assert.deepEqual([...new Set(records.filter((row) => row.type === 'progress').map((row) => row.progress.phase))], ['identify', 'evidence', 'model', 'check', 'simulate']);
   assert.equal(records.at(-1).type, 'result');
   assert.equal(records.at(-1).bundle.status, 'ready');
   const capped = await fetch(publicRequest('198.51.100.1'), env);
@@ -420,4 +440,167 @@ test('Grok and Gemini invalid-key responses are reported as authentication failu
     const driver = personalProviders(provider, 'fixture', undefined, async () => { throw new Error('Unexpected source read'); }, new AbortController().signal);
     await assert.rejects(driver.complete('Return JSON', '{}'), { status: 401 });
   }
+});
+
+test('held-out evidence is absent from model prompts and audited against the frozen factual scenario', async () => {
+  const afterQuote = 'Independent record: the later outcome was unchanged.';
+  const fixture = modeled('Frozen counterfactual');
+  const draft = { ...fixture, claims: [...fixture.claims, {
+    id: 'later', text: 'Held-out outcome sentinel', status: 'supported', scope: 'observed',
+    citations: [{ source: 'source-1', locator: 'Record 2', quote: afterQuote }],
+  }] };
+  const driver = providers(draft, quote + ' ' + afterQuote);
+  const complete = driver.complete;
+  let modelBuilt = false;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return one JSON object')) {
+      assert.ok(!payload.includes('Held-out outcome sentinel') && !payload.includes(afterQuote));
+      modelBuilt = true;
+    }
+    if (instructions.startsWith('Return JSON historical observations')) {
+      assert.ok(modelBuilt && payload.includes('Held-out outcome sentinel') && payload.includes(afterQuote));
+      return { observations: [{ step: 1, field: 'ending', value: 'unchanged', basis: ['later'] }] };
+    }
+    return complete(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the action changed?' }, driver);
+  assert.equal(bundle.schemaVersion, 3);
+  assert.equal(bundle.audit?.historicalScenario, 'historical-context');
+  const calc = simulate(bundle);
+  assert.equal(calc.historicalAudit?.status, 'consistent');
+  assert.equal(calc.historicalAudit?.divergence?.step, 1);
+  assert.equal(calc.forecast?.baseline, 'consistent');
+  assert.deepEqual(simulate(exportAnalysis(bundle)), calc);
+
+  bundle.audit!.observations[0].value = 'changed';
+  assert.equal(simulate(bundle).forecast?.baseline, 'disagrees');
+});
+
+test('a matching quote rejected by the independent evidence check cannot seed a model', async () => {
+  const driver = providers(modeled('Semantically unrelated claim'));
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON evidence review')) return { findings: [{ id: 'anchor', verdict: 'rejected' }] };
+    if (instructions.startsWith('Return one JSON object')) throw new Error('Modeling ran without any verified context');
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the decision changed?' }, driver);
+  assert.equal(bundle.status, 'insufficient');
+  assert.equal(bundle.model, null);
+  assert.match(bundle.gaps.join(' '), /未能通过原文或含义核对/);
+});
+
+test('another scenario matching the archive cannot rescue a mismatching locked baseline', async () => {
+  const keyResult = modeled('Alternative scenarios');
+  const afterQuote = 'The outcome was officially described as changed after the decision.';
+  const draft = { ...keyResult, claims: [...keyResult.claims, {
+    id: 'later', text: 'The observed outcome was changed', status: 'supported', scope: 'observed',
+    citations: [{ source: 'source-1', locator: 'Record 2', quote: afterQuote }],
+  }] };
+  const driver = providers(draft, quote + ' ' + afterQuote);
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON historical observations')) {
+      return { observations: [{ step: 1, field: 'ending', value: 'changed', basis: ['later'] }] };
+    }
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the decision changed?' }, driver);
+  const model = bundle.model!;
+  model.variables.push({ id: 'external', role: 'parameter', kind: 'boolean', label: 'External constraint', initial: false, basis: cited });
+  model.scenarios.push({ id: 'edited-scenario', label: 'Different context', basis: hypothesis, parameters: { external: true } });
+  model.rules[1].when = { op: 'or', args: [{ ref: 'external' }, { ref: 'action' }] };
+  const result = simulate(bundle);
+  assert.ok(result.runs.some(({ decision, scenario, metrics }) => decision === 'baseline' &&
+    scenario === 'edited-scenario' && metrics.ending === 'changed'));
+  assert.equal(result.historicalAudit?.status, 'disagrees');
+  assert.equal(result.forecast?.observations, null);
+});
+
+test('a unique immutable intervention is repaired without accepting a scenario override of it', async () => {
+  const draft = modeled('Explicit alternative');
+  draft.model.variables[0].role = 'state';
+  draft.model.scenarios = [{ id: 'wrong-override', label: 'An override of the intervention', basis: hypothesis, parameters: { action: true } }];
+  const bundle = await research({ question: 'What if the action changed?' }, providers(draft));
+  assert.equal(bundle.status, 'ready');
+  assert.equal(bundle.model!.variables.find(({ id }) => id === 'action')?.role, 'decision');
+  assert.deepEqual(bundle.model!.scenarios.map(({ id }) => id), ['historical-context']);
+  assert.equal(simulate(bundle).runs[0].metrics.ending, 'unchanged');
+});
+
+test('a later dated fact is withheld even when both model stages label it as context', async () => {
+  const later = 'The trial ended on December 6 in the independent record.';
+  const caseModel = modeled('Dated evidence');
+  const draft = { ...caseModel, claims: [...caseModel.claims, {
+    id: 'future', text: 'Distinct later event', status: 'supported', scope: 'context',
+    citations: [{ source: 'source-1', locator: 'Record 2', quote: later }],
+  }] };
+  const driver = providers(draft, quote + ' ' + later);
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON evidence dossier')) {
+      const evidence = await original(instructions, payload, schema) as {
+        start: string; end: string; claims: { id: string; when: string }[];
+      };
+      evidence.start = '1921-07';
+      evidence.end = '1921-12';
+      evidence.claims.find(({ id }) => id === 'future')!.when = '1921年12月6日';
+      return evidence;
+    }
+    if (instructions.startsWith('Return one JSON object')) assert.ok(!payload.includes('Distinct later event'));
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the action changed?' }, driver);
+  assert.equal(bundle.claims.find(({ id }) => id === 'future')?.scope, 'observed');
+  assert.equal(bundle.status, 'ready');
+});
+
+test('listing actors without a recorded exchange cannot pass as a strategic simulation', async () => {
+  const fixture = modeled('Nominal actors only');
+  const draft = { ...fixture, model: { ...fixture.model,
+    actors: [{ id: 'first', label: 'First claimant' }, { id: 'second', label: 'Second claimant' }] } };
+  const bundle = await research({ question: 'What if the participants bargained?' }, providers(draft));
+  assert.equal(bundle.status, 'insufficient');
+  assert.match(bundle.gaps.join(' '), /no scenario records two actors/);
+});
+
+test('the limited model derives a recorded response from a sourced prerequisite', async () => {
+  const draft = modeled('Cannot construct a full interaction');
+  const driver = providers({ ...draft, model: null, status: 'insufficient', gaps: ['The full negotiation is unobserved.'] });
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return one JSON object describing a two-party')) {
+      return { title: 'A bounded prerequisite', scope: 'Inspect legal procedure only.',
+        recorded: 'File under the original procedure', change: 'Apply under the proposed procedure', historicalBasis: 'anchor',
+        proposer: { name: 'Filing party', objective: 'Submit a request', basis: 'anchor' },
+        receiver: { name: 'Examining party', objective: 'Enforce the documented procedure', basis: 'anchor' },
+        constraint: { label: 'Satisfy the filing deadline', explanation: 'The examiner must check timeliness.', basis: 'anchor' } };
+    }
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if they changed the filing procedure?' }, driver);
+  assert.equal(bundle.status, 'ready');
+  assert.match(bundle.scope, /必要条件/);
+  const result = simulate(bundle);
+  assert.equal(result.forecast?.observations, null);
+  assert.equal(result.switches.length, 1);
+  assert.equal(result.switches[0].parameter, 'condition');
+  assert.equal(result.runs.find(({ decision, scenario }) => decision === 'alternative' && scenario === 'fails-condition')
+    ?.trace[1].actor, 'receiver');
+});
+
+test('the intervention audit can reject a structurally valid but unsupported model', async () => {
+  const driver = providers(modeled('Mechanically valid but off question'));
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON intervention audit')) {
+      assert.ok(!payload.includes('"observed"'));
+      return { accepted: false, issues: ['The changed actor does not match the question.'] };
+    }
+    if (instructions.startsWith('Return JSON historical observations')) throw new Error('A rejected proposal reached history check');
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the action changed?' }, driver);
+  assert.equal(bundle.status, 'insufficient');
+  assert.match(bundle.gaps.join(' '), /changed actor/);
 });

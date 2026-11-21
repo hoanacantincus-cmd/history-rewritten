@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { configureProviders } from './providers.ts';
 import { research } from './research.ts';
-import { simulate } from './engine.ts';
+import { exportAnalysis, simulate } from './engine.ts';
 import { requestSchema } from './schema.ts';
 
 async function main() {
@@ -22,7 +22,7 @@ async function main() {
     const imported: unknown = values.sources ? JSON.parse(await readFile(values.sources, 'utf8')) : [];
     if (!Array.isArray(imported)) throw new Error('--sources expects a JSON array');
     const sources = [...imported, ...(values.source ?? []).map((url) => ({ url }))];
-    result = await research(requestSchema.parse({ question: positionals[0], sources }), configureProviders());
+    result = exportAnalysis(await research(requestSchema.parse({ question: positionals[0], sources }), configureProviders()));
   } else {
     result = simulate(JSON.parse(await readFile(positionals[0], 'utf8')), {
       scenario: values.scenario,

@@ -46,6 +46,7 @@ function display(value: Scalar) {
 export function drawAgentBoard(
   bundle: Bundle, analysis: Simulation,
   references: (bundle: Bundle, ids: string[]) => HTMLElement,
+  startingScenario?: string,
 ) {
   const model = bundle.model!;
   const board = node('section', 'monitor actor-board');
@@ -62,6 +63,7 @@ export function drawAgentBoard(
   const fields = new Map(model.variables.map((field) => [field.id, field.label]));
   const rules = new Map([...model.rules, ...(model.policies ?? [])].map((rule) => [rule.id, rule.label]));
   const scenario = selectField('情景', model.scenarios);
+  if (startingScenario) scenario.select.value = startingScenario;
   const decision = selectField('对照分支', model.decisions);
   decision.select.value = model.forecast?.decision ?? model.decisions[1].id;
   const controls = node('div', 'controls actor-controls');
@@ -182,6 +184,12 @@ export function drawAgentBoard(
     slider.value = String(round);
     slider.setAttribute('aria-valuetext', label.textContent);
     info.replaceChildren(node('h4', undefined, names.get(active)));
+    const profile = model.actors.find(({ id }) => id === active);
+    if (profile?.objective) {
+      const note = node('p', 'model-note', profile.objective);
+      if (profile.basis) note.append(references(bundle, profile.basis));
+      info.append(note);
+    }
     const actions = events.filter(({ actor }) => actor === active);
     if (!actions.length) info.append(node('p', 'model-note', '本步没有此方的行动记录。'));
     for (const event of actions) {
@@ -190,7 +198,21 @@ export function drawAgentBoard(
       const summary = node('p', undefined, event.indeterminate ? '结果待定' : display(event.after));
       summary.append(references(bundle, event.basis));
       action.append(summary);
-      if (event.utilities?.length) {
+      if (event.observations?.length) {
+        action.append(node('p', 'model-note', '当时读取 · ' + event.observations
+          .map(({ field, value }) => (fields.get(field) ?? field) + '＝' + display(value)).join('、')));
+      }
+      if (event.candidates?.length) {
+        const alternatives = node('ul', 'actor-links');
+        for (const item of event.candidates) {
+          const label = display(item.action) + ' · ' + (item.feasible === true ? '可行，效用 ' + display(item.utility) :
+            item.feasible === false ? '当前不可行' : '可行性待定');
+          const row = node('li', undefined, label);
+          row.append(references(bundle, item.basis));
+          alternatives.append(row);
+        }
+        action.append(alternatives);
+      } else if (event.utilities?.length) {
         action.append(node('p', 'model-note', '可行行动及效用 · ' +
           event.utilities.map(({ action: move, value }) => display(move) + ' ' + display(value)).join(' / ')));
       }

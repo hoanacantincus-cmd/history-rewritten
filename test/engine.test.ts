@@ -144,18 +144,36 @@ test('the featured example derives visible actor links and three distinct diplom
   assert.deepEqual(agentEdges(model), [
     { from: 'emperor', to: 'yue', fields: ['mandate'] },
     { from: 'yue', to: 'qin', fields: ['proposal'] },
-    { from: 'qin', to: 'jin', fields: ['court-agenda'] },
+    { from: 'qin', to: 'jin', fields: ['agenda'] },
   ]);
   const output = simulate(data);
   assert.equal(output.forecast?.baseline, 'consistent');
   assert.deepEqual(output.runs.filter(({ decision }) => decision === 'trusted').map(({ metrics }) => metrics.direction), [
-    '重新商议条款', '谈判暂时僵持', '按原方案议和',
+    null, '延续原议程', '重启条款磋商', '出现议程分歧',
   ]);
   assert.equal(output.forecast?.observations, null);
+  assert.equal(output.historicalAudit?.observations.filter(({ result }) => result === 'matched').length, 2);
+  assert.deepEqual(output.switches.map(({ parameter }) => parameter), ['coordination', 'offer']);
   const trace = output.runs.find(({ decision }) => decision === 'trusted')!.trace;
   assert.deepEqual(observedAgentFlows(trace, 1), []);
   assert.deepEqual(observedAgentFlows(trace, 2), [{ from: 'emperor', to: 'yue', fields: ['mandate'] }]);
   assert.deepEqual(observedAgentFlows(trace, 3), [{ from: 'yue', to: 'qin', fields: ['proposal'] }]);
   model.variables.find(({ id }) => id === 'mandate')!.visibility!.yue = 3;
   assert.equal(agentEdges(model).some(({ from }) => from === 'emperor'), false);
+});
+
+test('parameter sweep can detect a switch between equal endpoint outcomes', () => {
+  const data = demo('yue-fei-1141');
+  const model = data.model!;
+  const basis = ['carry-basis'];
+  model.variables.push({ id: 'budget', label: 'A bounded offer', role: 'parameter', kind: 'number', unit: '1',
+    initial: null, min: 0, max: 4, basis });
+  const testCases = [0, 4].map((budget) => ({ id: 'budget-' + budget, label: 'Budget ' + budget, parameters: { budget }, basis }));
+  model.scenarios = [model.scenarios[0], ...testCases];
+  model.rules = model.rules.filter(({ target }) => target !== 'direction');
+  model.rules.push({ id: 'window', label: 'Open only inside range', target: 'direction', start: 5, until: 5,
+    when: { op: 'eq', args: [{ ref: 'budget' }, 2] }, value: '重启条款磋商', basis });
+  model.rules.push({ id: 'closed', label: 'Otherwise, retain', target: 'direction', start: 5, until: 5,
+    when: true, value: '延续原议程', basis });
+  assert.deepEqual(simulate(data).switches.map(({ from, to }) => [from, to]), [[1, 2], [2, 3]]);
 });

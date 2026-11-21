@@ -30,10 +30,10 @@ export const sourceSchema = z.strictObject({
   id, title: label, url: safeUrl, accessed: z.iso.date(),
   origin: z.enum(['web', 'user']),
 });
-const citationSchema = z.strictObject({
+export const citationSchema = z.strictObject({
   source: id, locator: label, quote: z.string().trim().min(8).max(180),
 });
-const claimSchema = z.strictObject({
+export const claimSchema = z.strictObject({
   id, text: prose,
   status: z.enum(['supported', 'disputed', 'assumption', 'gap']),
   scope: z.enum(['context', 'observed']),
@@ -73,7 +73,7 @@ const modelSchema = z.strictObject({
   stepLabel: label,
   decisionPoint: prose,
   decisionBasis: basis,
-  actors: z.array(z.strictObject({ id, label })).max(12),
+  actors: z.array(z.strictObject({ id, label, objective: prose.optional(), basis: basis.optional() })).max(12),
   variables: z.array(variableSchema).min(2).max(30),
   decisions: z.array(z.strictObject({ id, label, value: scalar, basis })).min(2).max(4),
   scenarios: z.array(z.strictObject({
@@ -97,9 +97,23 @@ export const draftSchema = z.strictObject({
   options: z.array(z.strictObject({ label, question: prose, basis })).max(5),
   model: modelSchema.nullable(),
 });
+const observationSchema = z.strictObject({
+  step, field: id, value: z.union([z.boolean(), z.number().finite(), z.string().min(1).max(100)]), basis,
+});
+const auditSchema = z.strictObject({
+  start: label, end: label, interpretation: prose,
+  historicalScenario: id,
+  observations: z.array(observationSchema).max(12),
+});
+export type HistoricalAudit = z.infer<typeof auditSchema>;
+export const lockedScenarioId = 'historical-context';
+
 const bundleSchema = draftSchema.extend({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]),
-  engineVersion: z.enum(['1', '2']),
+  schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  engineVersion: z.enum(['1', '2', '3']),
+  audit: auditSchema.optional(),
+  // This cached playback is exported for inspection. Simulation uses the validated model.
+  runRecord: z.unknown().optional(),
   question: prose,
   sources: z.array(sourceSchema).max(24),
 });
@@ -178,9 +192,10 @@ function typeOf(expr: Expr, fields: Map<string, Variable>, path: string): ValueT
   return ['lt', 'lte', 'gt', 'gte'].includes(expr.op) ? 'boolean' : 'number';
 }
 
-function validateModel(model: Model, checkBasis: (refs: string[], path: string, context?: boolean) => void) {
+function validateModel(model: Model, checkBasis: (refs: string[], path: string, context?: boolean) => void, audit?: HistoricalAudit) {
   const actors = index(model.actors, 'actors');
   const fields = index(model.variables, 'variables');
+  for (const actor of actors.values()) if (actor.basis) checkBasis(actor.basis, 'model.actors.' + actor.id, true);
   const branches = index(model.decisions, 'decisions');
   const scenarios = index(model.scenarios, 'scenarios');
   index([...model.rules, ...model.policies ?? []], 'rules and policies');
@@ -303,8 +318,9 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
     }
     if (forecast.weights) {
       const ids = new Set(forecast.weights.counts.map(({ scenario }) => scenario));
-      if (ids.size !== scenarios.size || ids.size !== forecast.weights.counts.length ||
-          [...ids].some((scenario) => !scenarios.has(scenario)) ||
+      const population = [...scenarios.keys()].filter((scenario) => scenario !== audit?.historicalScenario);
+      if (ids.size !== population.length || ids.size !== forecast.weights.counts.length ||
+          population.some((scenario) => !ids.has(scenario)) ||
           forecast.weights.counts.filter(({ count }) => count > 0).length < 2) {
         throw new ForecastEvidenceError('Forecast weights must cover every scenario, with at least two nonzero counts');
       }
@@ -318,6 +334,12 @@ export function parseBundle(input: unknown): Bundle {
   if (String(bundle.schemaVersion) !== bundle.engineVersion ||
       (bundle.schemaVersion === 1 && (bundle.model?.forecast || bundle.model?.policies))) {
     throw new Error('Analysis bundle uses incompatible schema and engine versions');
+  }
+  if (bundle.audit && (bundle.schemaVersion !== 3 || !bundle.model)) {
+    throw new Error('Historical audit requires a v3 model');
+  }
+  if (bundle.schemaVersion === 3 && bundle.model && !bundle.audit) {
+    throw new Error('A v3 model requires a locked historical context');
   }
   const sources = index(bundle.sources, 'sources');
   const claims = index(bundle.claims, 'claims');
@@ -345,7 +367,7 @@ export function parseBundle(input: unknown): Bundle {
   }
   for (const option of bundle.options) checkBasis(option.basis, 'options.' + option.label, true);
   if (bundle.status === 'ready' && bundle.model) {
-    validateModel(bundle.model, checkBasis);
+    validateModel(bundle.model, checkBasis, bundle.audit);
     if (!bundle.model.decisionBasis.some((ref) => claims.get(ref)?.status === 'supported')) {
       throw new Error('model.decisionBasis needs a sourced historical decision');
     }
@@ -363,6 +385,38 @@ export function parseBundle(input: unknown): Bundle {
             .map((number) => Number(number.replaceAll(',', ''))));
       });
       if (!counts.includes(weight.count)) throw new ForecastEvidenceError('Forecast count requires a matching cited observation: ' + weight.scenario);
+    }
+    if (bundle.audit) {
+      const { model, audit } = bundle;
+      const context = model.scenarios.find(({ id }) => id === audit.historicalScenario);
+      if (context?.id !== lockedScenarioId || Object.keys(context.parameters).length) {
+        throw new Error('Historical context must use the original initial values without scenario overrides');
+      }
+      if (model.forecast?.baselineCheck) throw new Error('V3 observations must be recorded in the historical audit');
+      for (const refs of [context.basis, model.decisionBasis, ...model.decisions.map(({ basis }) => basis)]) {
+        checkBasis(refs, 'historical context and decision', true);
+      }
+      for (const field of model.variables) {
+        if (field.role === 'parameter' && field.initial !== null &&
+            !field.basis.some((ref) => claims.get(ref)?.status === 'supported')) {
+          throw new Error('Historical parameter ' + field.id + ' needs pre-decision evidence or an unknown initial value');
+        }
+      }
+      const observed = new Set<string>();
+      for (const observation of audit.observations) {
+        const field = model.variables.find(({ id }) => id === observation.field);
+        const key = observation.step + ':' + observation.field;
+        if (!field || field.role !== 'state' || !valueFits(observation.value, field) ||
+            observation.step < 1 || observation.step > model.horizon || observed.has(key)) {
+          throw new Error('Invalid or duplicate historical observation ' + key);
+        }
+        observed.add(key);
+        checkBasis(observation.basis, 'historical observation');
+        if (!observation.basis.every((ref) => {
+          const claim = claims.get(ref);
+          return claim?.status === 'supported' && claim.scope === 'observed';
+        })) throw new Error('Historical observations require exclusively supported, held-out evidence');
+      }
     }
     const baselineCheck = bundle.model.forecast?.baselineCheck;
     if (baselineCheck && !baselineCheck.basis.some((ref) => claims.get(ref)?.status === 'supported')) {

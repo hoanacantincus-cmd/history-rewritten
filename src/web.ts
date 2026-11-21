@@ -1,7 +1,8 @@
 import './style.css';
 import { parseBundle } from './schema.ts';
 import type { Bundle, Scalar, Variable } from './schema.ts';
-import { simulate } from './engine.ts';
+import { exportAnalysis, simulate } from './engine.ts';
+import { drawHistoricalStudy } from './study-report.ts';
 import type { Simulation } from './engine.ts';
 import { drawAgentBoard } from './agent-board.ts';
 import { drawModelGraph } from './model-graph.ts';
@@ -274,7 +275,7 @@ function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.
     const current = model.scenarios.find((item) => item.id === scenario.select.value);
     const parameters = model.variables.filter((item) => item.role === 'parameter');
     editor.replaceChildren();
-    if (!current || !parameters.length) return;
+    if (!current || !parameters.length || current.id === bundle.audit?.historicalScenario) return;
     const details = el('details', 'parameter-editor');
     details.append(el('summary', undefined, '调整此情景的假设'));
     const line = el('div', 'controls');
@@ -347,8 +348,12 @@ function drawForecast(bundle: Bundle, analysis: Simulation) {
   if (forecast.baseline === 'disagrees' || forecast.baseline === 'unresolved') {
     const notice = el('p', 'model-note', forecast.baseline === 'disagrees'
       ? '模拟基线与史实冲突，结果需要复核。' : '模拟基线有待判定，暂不展示概率。');
-    notice.append(references(bundle, spec.baselineCheck!.basis));
+    const basis = spec.baselineCheck?.basis ?? bundle.audit?.observations.flatMap(({ basis }) => basis) ?? [];
+    notice.append(references(bundle, basis));
     section.append(notice);
+  }
+  if (bundle.audit && forecast.baseline === 'unavailable') {
+    section.append(el('p', 'model-note', '缺少可比的独立史实观测，以下走向按模型条件展示。'));
   }
   const grid = el('div', 'forecast-grid');
   const names = new Map(model.scenarios.map(({ id, label }) => [id, label]));
@@ -433,7 +438,7 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
   const button = el('button', 'button secondary', '导出分析包 ↓');
   button.type = 'button';
   button.onclick = () => {
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(exportAnalysis(bundle), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = el('a');
     link.href = url;
@@ -449,6 +454,7 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
     sections.setAttribute('aria-label', '推演报告分区');
     const anchors = [
       ...(analysis.forecast ? [['outcomes', '查看答案']] : []),
+      ...(bundle.audit ? [['historical-study', '双时间线与核对']] : []),
       ['research-process', '推演过程'], ['agent-replay', '智能体回放'], ['model-structure', '模型结构'], ['research-evidence', '史料与复算'],
     ];
     for (const [id, label] of anchors) {
@@ -462,7 +468,10 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
     }
     results.append(sections);
     if (analysis.forecast) results.append(drawForecast(bundle, analysis));
-    results.append(drawProcess(bundle, analysis), drawAgentBoard(bundle, analysis, references), drawModelGraph(bundle, references));
+    if (bundle.audit && analysis.historicalAudit) results.append(drawHistoricalStudy(bundle, analysis, references, show));
+    const demoScenario = selectedDemo ? analysis.switches[0]?.afterScenario : undefined;
+    results.append(drawProcess(bundle, analysis), drawAgentBoard(bundle, analysis, references, demoScenario),
+      drawModelGraph(bundle, references));
   } else if (bundle.status === 'insufficient') {
     results.append(el('p', 'model-note', '还没有通过校验的模型。下方保留可查的史料和缺口。'));
   }
@@ -562,13 +571,16 @@ function progressView() {
   const stepList = el('ol', 'phase-list');
   const sources = el('div', 'progress-refs');
   const terms = el('div', 'progress-terms');
+  const dossier = el('div', 'live-model');
+  dossier.hidden = true;
   const model = el('div', 'live-model');
+  const rounds = el('div', 'live-rounds');
   model.hidden = true;
   const start = performance.now();
   const log = el('ol', 'progress-log');
   const details = el('details', 'progress-details');
   details.append(el('summary', undefined, '处理记录'), log);
-  progressPanel.replaceChildren(heading, prompt, stepList, terms, sources, model, details);
+  progressPanel.replaceChildren(heading, prompt, stepList, terms, sources, dossier, model, rounds, details);
   progressPanel.hidden = false;
   progressPanel.focus();
   progressPanel.scrollIntoView({ block: 'start' });
@@ -581,6 +593,22 @@ function progressView() {
     log.append(entry);
     if (event.terms?.length) {
       terms.replaceChildren(el('strong', undefined, '检索词'), ...event.terms.map((term) => el('span', undefined, term)));
+    }
+    if (event.dossier) {
+      const { start, end, interpretation, context, heldOut } = event.dossier;
+      dossier.replaceChildren(el('strong', undefined, '决策窗口'), el('p', undefined, start + ' → ' + end),
+        el('p', undefined, interpretation),
+        el('p', 'model-note', context + ' 项已有史实，' + heldOut + ' 项分岔后的材料留作核对。'));
+      dossier.hidden = false;
+    }
+    if (event.round) {
+      const entry = el('div', 'live-round-entry');
+      entry.append(el('strong', undefined, event.detail));
+      for (const action of event.round.actions.slice(0, 3)) {
+        entry.append(el('p', undefined, [action.actor, action.rule, show(action.before) + ' → ' + show(action.after)].filter(Boolean).join(' · ')));
+      }
+      rounds.append(entry);
+      if (rounds.childElementCount > 6) rounds.firstElementChild?.remove();
     }
     if (event.simulation) {
       const { actors, branches, scenarios, rounds, runs } = event.simulation;

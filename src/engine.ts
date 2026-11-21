@@ -35,12 +35,15 @@ type Trace = {
   indeterminate: boolean;
   utilities?: { action: string | boolean; value: number | null }[];
   reads?: string[];
+  observations?: { field: string; value: Scalar }[];
+  candidates?: { action: string | boolean; feasible: boolean | null; utility: number | null; basis: string[] }[];
 };
 type Run = {
   scenario: string;
   decision: string;
   metrics: Record<string, Scalar>;
   trace: Trace[];
+  states?: Record<number, Record<string, Scalar>>;
 };
 type Comparison = {
   scenario: string;
@@ -66,7 +69,8 @@ export type ForecastResult = {
   }[];
 };
 
-function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScenarios: boolean): ForecastResult | null {
+function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScenarios: boolean,
+  audit?: ReturnType<typeof historicalComparison>): ForecastResult | null {
   const forecast = model.forecast;
   if (!forecast) return null;
   const field = model.variables.find(({ id }) => id === model.metrics.find(({ id }) => id === forecast.metric)!.field)!;
@@ -74,10 +78,14 @@ function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScena
   const actual = forecast.baselineCheck;
   const historical = runs.filter(({ decision }) => decision === model.decisions[0].id)
     .map(({ metrics }) => metrics[forecast.metric]);
-  const baseline = !actual || !fullWindow || !allScenarios ? 'unavailable' :
-    historical.includes(actual.value) ? 'consistent' : historical.includes(null) ? 'unresolved' : 'disagrees';
-  // A partial horizon or filtered scenario cannot be treated as the registered population.
-  const weights = fullWindow && allScenarios && baseline !== 'disagrees' && baseline !== 'unresolved' ? forecast.weights : undefined;
+  // For legacy bundles, a factual result must hold across all their candidate baselines.
+  const legacy = !actual || !fullWindow || !allScenarios || !historical.length ? 'unavailable' :
+    historical.every((value) => value === actual.value) ? 'consistent' :
+    historical.some((value) => value === null) ? 'unresolved' :
+    historical.some((value) => value === actual.value) ? 'unavailable' : 'disagrees';
+  const baseline = audit?.status ?? legacy;
+  const usableBaseline = audit || actual ? baseline === 'consistent' : true;
+  const weights = fullWindow && allScenarios && usableBaseline ? forecast.weights : undefined;
   const counts = new Map(weights?.counts.map(({ scenario, count }) => [scenario, count]));
   const observations = weights?.counts.reduce((sum, { count }) => sum + count, 0) ?? null;
   const unclassifiedScenarios = alternatives.filter((run) => run.metrics[forecast.metric] === null).map(({ scenario }) => scenario);
@@ -98,33 +106,37 @@ function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScena
 
 function chooseAction(policy: NonNullable<Model['policies']>[number], read: (name: string) => Scalar) {
   const utilities: NonNullable<Trace['utilities']> = [];
+  const candidates: NonNullable<Trace['candidates']> = [];
   let best: string | boolean | null = null;
   let maximum = -Infinity;
   let unresolved = false;
   const evidence = new Set(policy.basis);
   for (const action of policy.actions) {
     const feasible = evaluate(action.when, read);
-    if (feasible === false) continue;
-    action.basis.forEach((claim) => evidence.add(claim));
     const value = feasible === true ? evaluate(action.utility, read) : null;
     const score = typeof value === 'number' && Number.isFinite(value) ? value : null;
+    candidates.push({ action: action.value, feasible: feasible === true || feasible === false ? feasible : null,
+      utility: score, basis: action.basis });
+    if (feasible === false) continue;
+    action.basis.forEach((claim) => evidence.add(claim));
     utilities.push({ action: action.value, value: score });
     if (score === null) unresolved = true;
     else if (score > maximum) { best = action.value; maximum = score; }
     else if (score === maximum) best = null;
   }
-  return { value: unresolved ? null : best, evidence: [...evidence], utilities };
+  return { value: unresolved ? null : best, evidence: [...evidence], utilities, candidates };
 }
 
 function run(
   model: Model, scenario: Model['scenarios'][number], decision: Model['decisions'][number],
-  horizon: number, fields: Map<string, Variable>,
+  horizon: number, fields: Map<string, Variable>, detail: boolean, recordStates: boolean = false,
 ): Run {
   let state = Object.fromEntries(model.variables.map((item) => [
     item.id, item.role === 'decision' ? decision.value : item.initial,
   ]));
   state = { ...state, ...scenario.parameters };
   const trace: Trace[] = [];
+  const states: Record<number, Record<string, Scalar>> = recordStates ? { 0: state } : {};
   const reportedUnknown = new Set<string>();
   for (let step = 1; step <= horizon; step++) {
     const next = { ...state };
@@ -144,6 +156,7 @@ function run(
         step, rule: policy.id, actor: policy.actor, field: policy.target, before: state[policy.target],
         after: choice.value, basis: choice.evidence, utilities: choice.utilities, indeterminate: choice.value === null,
         ...(fieldsRead.size ? { reads: [...fieldsRead] } : {}),
+        ...(detail ? { candidates: choice.candidates, observations: [...fieldsRead].map((field) => ({ field, value: state[field] })) } : {}),
       });
     }
     for (const rule of model.rules) {
@@ -161,18 +174,81 @@ function run(
       next[rule.target] = after;
       if (before !== after || (after === null && !reportedUnknown.has(rule.id))) {
         trace.push({ step, rule: rule.id, field: rule.target, actor: rule.actor, before, after, basis: rule.basis,
-          indeterminate: after === null, ...(fieldsRead.size ? { reads: [...fieldsRead] } : {}) });
+          indeterminate: after === null, ...(fieldsRead.size ? { reads: [...fieldsRead] } : {}),
+          ...(detail ? { observations: [...fieldsRead].map((field) => ({ field, value: state[field] })) } : {}) });
       }
       if (after === null) reportedUnknown.add(rule.id);
     }
     state = next;
+    if (recordStates) states[step] = state;
   }
   return {
     scenario: scenario.id,
     decision: decision.id,
     metrics: Object.fromEntries(model.metrics.map((indicator) => [indicator.id, state[indicator.field]])),
     trace,
+    ...(recordStates ? { states } : {}),
   };
+}
+
+function historicalComparison(spec: NonNullable<Bundle['audit']>, model: Model, runs: Run[], horizon: number) {
+  const baseline = runs.find(({ scenario, decision }) => scenario === spec.historicalScenario && decision === model.decisions[0].id);
+  const alternative = runs.find(({ scenario, decision }) => scenario === spec.historicalScenario &&
+    decision === (model.forecast?.decision ?? model.decisions[1].id));
+  const observations = spec.observations.map((item) => {
+    const calculated = baseline?.states?.[item.step]?.[item.field] ?? null;
+    const result = calculated === null ? 'unknown' as const :
+      calculated === item.value ? 'matched' as const : 'mismatch' as const;
+    return { ...item, calculated, result };
+  });
+  const status: ForecastResult['baseline'] = !baseline || horizon !== model.horizon || !observations.length ? 'unavailable' :
+    observations.some(({ result }) => result === 'mismatch') ? 'disagrees' :
+    observations.some(({ result }) => result === 'unknown') ? 'unresolved' : 'consistent';
+  const first = model.variables.filter(({ role }) => role === 'state');
+  for (let step = 1; baseline?.states && alternative?.states && step <= horizon; step++) {
+    const changes = first.flatMap(({ id }) => {
+      const before = baseline.states![step][id];
+      const after = alternative.states![step][id];
+      return before !== after ? [{ field: id, before, after }] : [];
+    });
+    if (changes.length) return { status, observations, divergence: { step, changes } };
+  }
+  return { status, observations, divergence: null };
+}
+
+function switches(model: Model, runs: Run[], horizon: number, fields: Map<string, Variable>) {
+  if (!model.forecast) return [];
+  const { decision, metric } = model.forecast;
+  const alternative = model.decisions.find(({ id }) => id === decision)!;
+  const alternatives = new Map(runs.filter((item) => item.decision === decision).map((item) => [item.scenario, item]));
+  const scenarios = model.scenarios.filter(({ id }) => alternatives.has(id));
+  const parameters = model.variables.filter(({ role }) => role === 'parameter');
+  let interiorBudget = 24;
+  return scenarios.flatMap((before, index) => scenarios.slice(index + 1).flatMap((after) => {
+    const changed = parameters.flatMap(({ id, initial }) => {
+      const left = Object.hasOwn(before.parameters, id) ? before.parameters[id] : initial;
+      const right = Object.hasOwn(after.parameters, id) ? after.parameters[id] : initial;
+      return left !== right ? [{ parameter: id, from: left, to: right }] : [];
+    });
+    if (changed.length !== 1 || changed[0].from === null || changed[0].to === null) return [];
+    const { parameter, from, to } = changed[0];
+    const samples = [{ value: from, outcome: alternatives.get(before.id)!.metrics[metric] }];
+    if (typeof from === 'number' && typeof to === 'number' && interiorBudget >= 3) {
+      interiorBudget -= 3;
+      for (const ratio of [0.25, 0.5, 0.75]) {
+        const value = from * (1 - ratio) + to * ratio;
+        const sample = { ...before, parameters: { ...before.parameters, [parameter]: value } };
+        samples.push({ value, outcome: run(model, sample, alternative, horizon, fields, false).metrics[metric] });
+      }
+    }
+    samples.push({ value: to, outcome: alternatives.get(after.id)!.metrics[metric] });
+    return samples.slice(1).flatMap(({ value, outcome }, i) => {
+      const previous = samples[i];
+      if (previous.outcome === null || outcome === null || previous.outcome === outcome) return [];
+      return [{ parameter, from: previous.value, to: value, beforeScenario: before.id, afterScenario: after.id,
+        before: previous.outcome, after: outcome }];
+    });
+  }));
 }
 
 export function simulate(input: unknown, options: { scenario?: string; horizon?: number } = {}) {
@@ -180,7 +256,7 @@ export function simulate(input: unknown, options: { scenario?: string; horizon?:
   const model = bundle.model;
   if (!model) return {
     engineVersion: bundle.engineVersion, status: bundle.status, gaps: bundle.gaps,
-    runs: [], comparisons: [], sensitivity: [], forecast: null,
+    runs: [], comparisons: [], sensitivity: [], forecast: null, historicalAudit: null, switches: [],
   };
   const horizon = options.horizon ?? model.horizon;
   if (!Number.isInteger(horizon) || horizon < 1 || horizon > model.horizon) throw new Error('Horizon is outside the model window');
@@ -192,7 +268,7 @@ export function simulate(input: unknown, options: { scenario?: string; horizon?:
   const runs: Run[] = [];
   const comparisons: Comparison[] = [];
   for (const scenario of scenarios) {
-    const [baseline, ...alternatives] = model.decisions.map((decision) => run(model, scenario, decision, horizon, fields));
+    const [baseline, ...alternatives] = model.decisions.map((decision) => run(model, scenario, decision, horizon, fields, Boolean(bundle.audit), bundle.audit?.historicalScenario === scenario.id));
     runs.push(baseline, ...alternatives);
     for (const alternative of alternatives) {
       for (const metric of model.metrics) {
@@ -220,7 +296,16 @@ export function simulate(input: unknown, options: { scenario?: string; horizon?:
       deltaRange: numeric.length ? [Math.min(...numeric), Math.max(...numeric)] : null,
     };
   }));
-  const forecast = deriveForecast(model, runs, horizon === model.horizon, scenarios.length === model.scenarios.length);
-  return { engineVersion: bundle.engineVersion, status: bundle.status, horizon, gaps: bundle.gaps, runs, comparisons, sensitivity, forecast };
+  const historicalAudit = bundle.audit ? historicalComparison(bundle.audit, model, runs, horizon) : null;
+  const forecast = deriveForecast(model, runs, horizon === model.horizon, scenarios.length === model.scenarios.length, historicalAudit ?? undefined);
+  return { engineVersion: bundle.engineVersion, status: bundle.status, horizon, gaps: bundle.gaps, runs, comparisons, sensitivity, forecast,
+    historicalAudit, switches: bundle.audit && model.forecast ? switches(model, runs, horizon, fields) : [] };
 }
 export type Simulation = ReturnType<typeof simulate>;
+
+export function exportAnalysis(bundle: Bundle) {
+  if (!bundle.audit) return bundle;
+  const { runs, historicalAudit, switches } = simulate(bundle);
+  return { ...bundle, runRecord: { historicalAudit, switches,
+    runs: runs.filter(({ scenario }) => scenario === bundle.audit!.historicalScenario) } };
+}

@@ -12,8 +12,9 @@ const siteUrl = siteOrigin + '/history-rewritten/';
 const allowedArchives = new Set([
   'www.archives.gov', 'archives.gov', 'www.loc.gov', 'loc.gov', 'history.state.gov',
   'www.parliament.uk', 'hansard.parliament.uk', 'api.parliament.uk', 'www.un.org',
+  'nationalarchives.ie', 'www.nationalarchives.ie', 'ghdi.ghi-dc.org', 'germanhistorydocs.org', 'www.bundestag.de',
   'treaties.un.org', 'avalon.law.yale.edu', 'www.dpm.org.cn', 'ctext.org',
-  'www.shidianguji.com', 'www.britishmuseum.org', 'www.nationalarchives.gov.uk',
+  'www.shidianguji.com', 'www.britishmuseum.org', 'www.nationalarchives.gov.uk', 'www.senate.gov', 'www.imf.org',
   'psl.noaa.gov', 'www.ncei.noaa.gov', 'www.ecmwf.int',
 ]);
 const maxSourceBytes = 680_000;
@@ -60,7 +61,7 @@ async function readArchive(input: string, cancellation: AbortSignal): Promise<Pa
     }
     if (size >= maxSourceBytes) await reader.cancel();
     text += decoder.decode();
-    if (/^text\/plain/i.test(type)) return { url: url.href, title: url.hostname, text: normalizeText(text).slice(0, 12_000) };
+    if (/^text\/plain/i.test(type)) return { url: url.href, title: url.hostname, text: normalizeText(text).slice(0, 48_000) };
 
     const $ = load(text);
     const title = normalizeText($('title').first().text()) || url.hostname;
@@ -72,7 +73,7 @@ async function readArchive(input: string, cancellation: AbortSignal): Promise<Pa
     const article = $('.mw-parser-output, article, main, [role=main]').first();
     const content = article.length ? article : $('body');
     content.find('p,li,h1,h2,h3,h4,td,th,tr,br').append(' ');
-    return { url: url.href, title, text: normalizeText(content.text()).slice(0, 12_000), references };
+    return { url: url.href, title, text: normalizeText(content.text()).slice(0, 48_000), references };
   }
   throw new Error('Too many archive redirects');
 }
@@ -231,7 +232,7 @@ export function publicFetch(provide: Provide = (key, model, signal, provider) =>
     const writer = body.writable.getWriter();
     const encoder = new TextEncoder();
     const cancellation = new AbortController();
-    const signal = AbortSignal.any([request.signal, cancellation.signal, AbortSignal.timeout(180_000)]);
+    const signal = AbortSignal.any([request.signal, cancellation.signal, AbortSignal.timeout(260_000)]);
     const emit = (event: unknown) =>
       writer.write(encoder.encode(JSON.stringify(event) + '\n')).catch(() => cancellation.abort());
     void (async () => {
