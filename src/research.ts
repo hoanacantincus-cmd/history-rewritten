@@ -31,7 +31,7 @@ const modelPrompt = [
   'Parameters may vary by scenario but are identical across decisions within that scenario. Use null for unknown, especially for an outcome that has not yet been determined.',
   'Use the actor and visibility fields to ensure actors respond only to information they could have received. A field with no visibility map is public; missing actors in a map cannot see it.',
   'For strategic interactions define separate agents with feasible actions and dimensionless utilities in model.policies. Policy targets are boolean or categorical state fields separate from ordinary rule targets. Each policy chooses the best supported action against the previous state. Document every payoff as evidence or an explicit assumption; unknown or tied choices stay unresolved.',
-  'For a ready model include forecast with the requested non-baseline decision, one mutually exclusive categorical outcome metric, and four factor assessments: internal, external, strategy, weather. Mark factors modeled, unresolved, or irrelevant and cite their rationale. For modeled factors list the fields that actually represent them.',
+  'For a ready model include forecast with the requested non-baseline decision, one categorical or boolean outcome metric, and four factor assessments: internal, external, strategy, weather. Mark factors modeled, unresolved, or irrelevant and cite their rationale. For modeled factors list the fields that actually represent them.',
   'Do not predict precise historical weather from modern averages. Distinguish dated reports, reanalysis, and unweighted weather scenarios. If a relevant factor is unavailable, surface that as unknown or an explicit assumption.',
   'Omit forecast.weights unless a historical source records actual counts for EACH disjoint joint scenario, or documents a random mechanism with verifiable counts of equiprobable outcomes. Each count must appear as digits in the supporting quote. State why those counts transfer to this intervention. Do not invent priors, percentages, or equal weights as a default.',
   'Scope tightly using available evidence. Aim for 6–12 claims, up to five relevant agents and up to 20 rules. Output a single JSON object only.',
@@ -183,12 +183,60 @@ export async function research(input: unknown, providers: Providers, accessed = 
         const baseline = draft.model.decisions[0];
         const intervention = draft.model.variables.find((field) => field.role === 'decision');
         if (intervention) intervention.initial = baseline.value;
+        // The stated horizon controls which proposed transitions can occur.
+        for (const key of ['rules', 'policies'] as const) {
+          const transitions = draft.model[key];
+          if (!transitions) continue;
+          for (let index = transitions.length - 1; index >= 0; index--) {
+            const transition = transitions[index];
+            transition.until = Math.min(transition.until, draft.model.horizon);
+            transition.start = Math.max(transition.start, 1);
+            if (transition.start > transition.until) transitions.splice(index, 1);
+          }
+        }
+        const isObserved = (id: string) => claims.get(id)?.scope === 'observed';
+        let missingAtStart: string | undefined;
+        function unknownBasis(refs: string[]) {
+          if (!missingAtStart && draft.claims.length < 60) {
+            let suffix = 1;
+            while (claims.has('engine-initial-unknown-' + suffix)) suffix++;
+            missingAtStart = 'engine-initial-unknown-' + suffix;
+            draft.claims.push({
+              id: missingAtStart, status: 'gap', scope: 'context', citations: [],
+              text: '仅在决策后获知的初始值或情景条件设为待定。',
+            });
+          }
+          return missingAtStart ? [...refs.filter((id) => !isObserved(id)).slice(0, 9), missingAtStart] : refs;
+        }
+        const deferred = new Set<string>();
         for (const field of draft.model.variables) {
-          if (field.role !== 'state' || !field.basis.some((id) => claims.get(id)?.scope === 'observed')) continue;
-          const context = draft.model.decisionBasis.filter((id) => claims.get(id)?.scope === 'context');
-          if (context.length) {
-            field.initial = null;
-            field.basis = context;
+          if (field.role === 'decision' || !field.basis.some(isObserved)) continue;
+          field.basis = unknownBasis(field.basis);
+          field.initial = null;
+          deferred.add(field.id);
+        }
+        const roles = new Map(draft.model.variables.map(({ id, role }) => [id, role]));
+        for (const scenario of draft.model.scenarios) {
+          const usesLaterEvidence = scenario.basis.some(isObserved);
+          for (const field of Object.keys(scenario.parameters)) {
+            const role = roles.get(field);
+            if (role && role !== 'parameter') delete scenario.parameters[field];
+            else if (usesLaterEvidence || deferred.has(field)) scenario.parameters[field] = null;
+          }
+          if (usesLaterEvidence) scenario.basis = unknownBasis(scenario.basis);
+        }
+        for (const rule of draft.model.rules) {
+          if (!rule.basis.some(isObserved)) continue;
+          rule.basis = unknownBasis(rule.basis);
+          rule.value = null;
+        }
+        for (const policy of draft.model.policies ?? []) {
+          const unsupported = policy.basis.some(isObserved);
+          if (unsupported) policy.basis = unknownBasis(policy.basis);
+          for (const action of policy.actions) {
+            const actionUnsupported = action.basis.some(isObserved);
+            if (actionUnsupported) action.basis = unknownBasis(action.basis);
+            if (unsupported || actionUnsupported) action.utility = null;
           }
         }
       }
@@ -212,7 +260,7 @@ export async function research(input: unknown, providers: Providers, accessed = 
     try {
       return parseBundle({
         ...grounded, ...common, status: 'insufficient', model: null, options: [],
-        gaps: ['已保留查到的史实，现有模型未通过规则校验。', ...grounded.gaps].slice(0, 16),
+        gaps: ['已保留查到的史实，现有模型未通过规则校验。', ...grounded.gaps, repair.slice(0, 1200)].slice(0, 16),
       });
     } catch { /* A malformed evidence catalog cannot be exported. */ }
   }

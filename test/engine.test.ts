@@ -75,6 +75,16 @@ test('forecast probabilities use source counts and keep unclassified mass visibl
   assert.throws(() => simulate(data), /matching cited observation/);
 });
 
+test('retrospective evidence anchors the recorded decision without entering simulated transitions', () => {
+  const data = demo('ratification-1788');
+  const model = data.model!;
+  data.claims.find(({ id }) => id === 'nh-vote')!.scope = 'observed';
+  const count = model.rules.find(({ id }) => id === 'nh-count')!;
+  assert.throws(() => simulate(data), /post-decision observation nh-vote/);
+  count.basis = ['prior'];
+  assert.equal(simulate(data, { horizon: 1 }).runs[0].metrics.total, 9);
+});
+
 test('two agents respond in order to observed actions and weather-dependent costs', () => {
   const data = demo('lottery-1788');
   const model = data.model!;

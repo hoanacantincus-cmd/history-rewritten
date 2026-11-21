@@ -299,6 +299,7 @@ function drawForecast(bundle: Bundle, horizon?: number) {
   const forecast = simulate(bundle, { horizon }).forecast!;
   const section = el('section', 'monitor');
   section.append(el('h3', undefined, forecast.observations ? '可能走向与模型概率' : '可能走向'));
+  section.append(el('p', 'model-note', model.metrics.find(({ id }) => id === spec.metric)!.label));
   const grid = el('div', 'forecast-grid');
   const names = new Map(model.scenarios.map(({ id, label }) => [id, label]));
   const outcomes = [...forecast.outcomes].sort((a, b) => (b.probability?.lower ?? 0) - (a.probability?.lower ?? 0));
@@ -321,6 +322,9 @@ function drawForecast(bundle: Bundle, horizon?: number) {
     if (forecast.unknownMass) section.append(el('p', 'model-note', '有 ' + percent.format(forecast.unknownMass) + ' 的权重对应未判定情景，因此显示概率上下界。'));
   } else {
     section.append(el('p', 'model-note', '目前只有条件情景，资料不足以估计各走向的概率。'));
+  }
+  if (forecast.unclassifiedScenarios.length) {
+    section.append(el('p', 'model-note', '走向待定的情景：' + forecast.unclassifiedScenarios.map((id) => names.get(id)).join('、')));
   }
   const audit = el('details');
   audit.append(el('summary', undefined, '查看各方博弈、内外条件与天气依据'));

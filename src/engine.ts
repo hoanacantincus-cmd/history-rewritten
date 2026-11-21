@@ -56,6 +56,7 @@ export type ForecastResult = {
   outcome: string;
   observations: number | null;
   unknownMass: number | null;
+  unclassifiedScenarios: string[];
   outcomes: {
     label: string;
     scenarios: string[];
@@ -72,13 +73,16 @@ function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScena
   const weights = fullWindow && allScenarios ? forecast.weights : undefined;
   const counts = new Map(weights?.counts.map(({ scenario, count }) => [scenario, count]));
   const observations = weights?.counts.reduce((sum, { count }) => sum + count, 0) ?? null;
-  const unknown = alternatives.filter((run) => run.metrics[forecast.metric] === null)
-    .reduce((sum, run) => sum + (counts.get(run.scenario) ?? 0), 0);
+  const unclassifiedScenarios = alternatives.filter((run) => run.metrics[forecast.metric] === null).map(({ scenario }) => scenario);
+  const unknown = unclassifiedScenarios.reduce((sum, scenario) => sum + (counts.get(scenario) ?? 0), 0);
+  const possible = field.kind === 'boolean'
+    ? [{ value: true, label: '是' }, { value: false, label: '否' }]
+    : field.values!.map((value) => ({ value, label: value }));
   return {
-    decision: forecast.decision, outcome: forecast.metric, observations,
+    decision: forecast.decision, outcome: forecast.metric, observations, unclassifiedScenarios,
     unknownMass: observations ? unknown / observations : null,
-    outcomes: field.values!.map((label) => {
-      const scenarios = alternatives.filter((run) => run.metrics[forecast.metric] === label).map(({ scenario }) => scenario);
+    outcomes: possible.map(({ value, label }) => {
+      const scenarios = alternatives.filter((run) => run.metrics[forecast.metric] === value).map(({ scenario }) => scenario);
       const count = scenarios.reduce((sum, scenario) => sum + (counts.get(scenario) ?? 0), 0);
       return { label, scenarios, probability: observations ? { lower: count / observations, upper: (count + unknown) / observations } : null };
     }),

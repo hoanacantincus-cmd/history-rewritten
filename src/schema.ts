@@ -192,7 +192,9 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
   const decision = decisions[0];
   if (model.decisions[0].value !== decision.initial) throw new Error('model.decisions[0] must match the historical baseline');
   if (new Set(model.decisions.map((item) => item.value)).size !== model.decisions.length) throw new Error('model.decisions must set distinct values');
-  checkBasis(model.decisionBasis, 'model.decisionBasis', true);
+  // A factual intervention anchor can be established by a later account.
+  // Its proof is metadata, while the selected decision value drives the run.
+  checkBasis(model.decisionBasis, 'model.decisionBasis');
   for (const field of fields.values()) {
     const path = 'model.variables.' + field.id;
     if (field.kind === 'number' && !field.unit) throw new Error(path + ' needs a unit');
@@ -208,11 +210,11 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
     for (const actor of Object.keys(field.visibility ?? {})) {
       if (!actors.has(actor)) throw new Error(path + ' refers to unknown actor ' + actor);
     }
-    checkBasis(field.basis, path, true);
+    checkBasis(field.basis, path, field.role !== 'decision');
   }
   for (const branch of model.decisions) {
     if (branch.value === null || !valueFits(branch.value, decision)) throw new Error('Invalid decision value in ' + branch.id);
-    checkBasis(branch.basis, 'model.decisions.' + branch.id, true);
+    checkBasis(branch.basis, 'model.decisions.' + branch.id);
   }
   for (const scenario of model.scenarios) {
     for (const [name, value] of Object.entries(scenario.parameters)) {
@@ -274,8 +276,9 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
   if (forecast) {
     const outcome = metrics.get(forecast.metric);
     const field = outcome && fields.get(outcome.field);
-    if (!branches.has(forecast.decision) || forecast.decision === model.decisions[0].id || field?.kind !== 'category' || field.role !== 'state') {
-      throw new Error('Forecast needs a non-baseline decision and a categorical outcome state');
+    if (!branches.has(forecast.decision) || forecast.decision === model.decisions[0].id ||
+        !field || field.kind === 'number' || field.role !== 'state') {
+      throw new Error('Forecast needs a non-baseline decision and a categorical or boolean outcome state');
     }
     if (new Set(forecast.factors.map(({ kind }) => kind)).size !== factorKinds.length) {
       throw new Error('Forecast factors must cover internal, external, strategy and weather once each');
@@ -284,7 +287,7 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
       if (factor.variables.some((fieldId) => !fields.has(fieldId)) || (factor.status === 'modeled' && !factor.variables.length)) {
         throw new Error('Forecast factor ' + factor.kind + ' must refer to its model fields');
       }
-      checkBasis(factor.basis, 'model.forecast.factors.' + factor.kind, true);
+      checkBasis(factor.basis, 'model.forecast.factors.' + factor.kind);
     }
     if (forecast.weights) {
       const ids = new Set(forecast.weights.counts.map(({ scenario }) => scenario));
