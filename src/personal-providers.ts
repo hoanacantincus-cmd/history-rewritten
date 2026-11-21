@@ -22,9 +22,14 @@ const chatModels = {
 async function checkProvider(response: Response, provider: PersonalModel) {
   if (response.ok) return;
   let status = response.status;
-  if (provider === 'gemini' && status === 400) {
-    const body = await response.json().catch(() => null) as { error?: { details?: { reason?: string }[] } } | null;
-    if (body?.error?.details?.some(({ reason }) => reason === 'API_KEY_INVALID')) status = 401;
+  if (status === 400 && (provider === 'gemini' || provider === 'grok')) {
+    const body = await response.json().catch(() => null) as {
+      error?: string | { details?: { reason?: string }[] };
+    } | null;
+    const error = body?.error;
+    if (provider === 'grok' && typeof error === 'string' && /incorrect api key/i.test(error)) status = 401;
+    if (provider === 'gemini' && error && typeof error === 'object' && Array.isArray(error.details) &&
+        error.details?.some(({ reason }) => reason === 'API_KEY_INVALID')) status = 401;
   } else {
     await response.body?.cancel().catch(() => undefined);
   }

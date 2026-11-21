@@ -410,3 +410,14 @@ test('personal providers send their keys only to the selected provider using its
   }
   assert.equal(index, fixtures.length);
 });
+
+test('Grok and Gemini invalid-key responses are reported as authentication failures', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url: URL | string) => Response.json(
+    new URL(url).hostname === 'api.x.ai' ? { code: 'invalid-argument', error: 'Incorrect API key provided.' } :
+      { error: { details: [{ reason: 'API_KEY_INVALID' }] } }, { status: 400 },
+  ));
+  for (const provider of ['grok', 'gemini'] as const) {
+    const driver = personalProviders(provider, 'fixture', undefined, async () => { throw new Error('Unexpected source read'); }, new AbortController().signal);
+    await assert.rejects(driver.complete('Return JSON', '{}'), { status: 401 });
+  }
+});
