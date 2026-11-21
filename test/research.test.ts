@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { research } from '../src/research.ts';
+import { documentedRole, lockStudyIntent } from '../src/historical-evidence.ts';
 import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
 import { exportAnalysis, simulate } from '../src/engine.ts';
@@ -603,4 +604,53 @@ test('the intervention audit can reject a structurally valid but unsupported mod
   const bundle = await research({ question: 'What if the action changed?' }, driver);
   assert.equal(bundle.status, 'insufficient');
   assert.match(bundle.gaps.join(' '), /changed actor/);
+});
+
+test('the exact actors named by a user cannot be replaced in a limited simulation', async () => {
+  const question = '如果甲方修改条款，乙方会签署吗？';
+  const fixture = modeled('Wrong recipient');
+  const driver = providers({ ...fixture, status: 'insufficient', model: null, gaps: ['The full mechanism is unavailable.'] });
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON with title')) {
+      return { title: question, queries: [question], intent: { changer: '甲方', responder: '乙方', change: '甲方修改条款',
+        outcome: '乙方会签署吗', inventedActor: '丙方' } };
+    }
+    if (instructions.startsWith('Return one JSON object describing a two-party')) {
+      const source = JSON.parse(payload);
+      assert.equal(source.lockedIntent.responder, '乙方');
+      return { title: 'Wrong recipient', scope: 'Check legal procedure.',
+        recorded: 'Original procedure', change: 'Apply under the proposed procedure', historicalBasis: 'anchor',
+        proposer: { name: '甲方', objective: 'Submit request', basis: 'anchor' },
+        receiver: { name: '丙方', objective: 'Check request', basis: 'anchor' },
+        constraint: { label: 'Filing deadline', explanation: 'Check timeliness.', basis: 'anchor' } };
+    }
+    return original(instructions, payload, schema);
+  };
+  const result = await research({ question }, driver);
+  assert.equal(result.status, 'insufficient');
+  assert.equal(result.model, null);
+});
+
+test('one malformed verifier row does not discard a separate well-supported claim', async () => {
+  const driver = providers(modeled('Preserved evidence'));
+  const original = driver.complete;
+  driver.complete = async (instructions, payload, schema) => {
+    if (instructions.startsWith('Return JSON evidence review')) {
+      return { findings: [{ id: 'anchor', verdict: 'supported', relation: 'prior' },
+        { id: 'unrelated', verdict: 'unrecognized' }] };
+    }
+    return original(instructions, payload, schema);
+  };
+  const bundle = await research({ question: 'What if the action changed?' }, driver);
+  assert.equal(bundle.status, 'ready');
+  assert.equal(bundle.claims.find(({ id }) => id === 'anchor')?.status, 'supported');
+});
+
+test('a locked actor keeps an exact user role and accepts a title supported by the archived name', () => {
+  const question = '如果政府接受议会的提案，议会会通过吗？';
+  const intent = lockStudyIntent({ changer: '政府接受议会的提案', responder: '议会', outcome: '议会会通过吗' }, question);
+  assert.equal(intent.changer, '政府');
+  assert.equal(documentedRole('王某', '政府首席代表', ['政府首席代表王某接收议程。']), '政府首席代表 · 王某');
+  assert.equal(documentedRole('王某', '政府首席代表', ['政府首席代表收到当地商人王某的信。']), undefined);
 });

@@ -5,6 +5,38 @@ import { valueFits } from './schema.ts';
 import type { Bundle, HistoricalAudit, Model, Source } from './schema.ts';
 
 export type Evidence = { source: Source; text: string };
+export type StudyIntent = { changer?: string; responder?: string; change?: string; outcome?: string };
+
+export function lockStudyIntent(value: StudyIntent | undefined, question: string): StudyIntent {
+  if (!value) return {};
+  function sourceSpan(text?: string) {
+    return text && question.includes(text) ? text : undefined;
+  }
+  const actor = (text?: string) => sourceSpan(text)?.split(/接受|拒绝|同意|提出|撤回|批准|通过|签署|承认|决定/u)[0].trim() || undefined;
+  const changer = actor(value.changer);
+  const responder = actor(value.responder);
+  return { changer, responder: responder === changer ? undefined : responder,
+    change: sourceSpan(value.change), outcome: sourceSpan(value.outcome) };
+}
+
+function normalizedName(text: string) {
+  return text.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+}
+
+export function actorMatches(label: string, name?: string) {
+  return !name || normalizedName(label).includes(normalizedName(name));
+}
+
+export function documentedRole(label: string, name: string | undefined, facts: string[]) {
+  if (!name || actorMatches(label, name)) return label;
+  const alias = normalizedName(label);
+  const role = normalizedName(name);
+  if (!alias || !role) return undefined;
+  return facts.some((text) => {
+    const original = normalizedName(text);
+    return original.includes(role + alias) || original.includes(alias + role);
+  }) ? name + ' · ' + label : undefined;
+}
 const itemSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
   text: z.string().trim().min(1).max(1200),
@@ -18,14 +50,14 @@ const dossierSchema = z.object({
   interpretation: z.string().trim().min(1).max(1200),
   claims: z.array(itemSchema).max(24),
 });
-const verdictSchema = z.object({
-  findings: z.array(z.object({
-    id: z.string(),
-    verdict: z.enum(['supported', 'disputed', 'rejected']),
-    scope: z.enum(['context', 'observed']).optional(),
-    relation: z.enum(['prior', 'recorded-decision', 'later', 'uncertain']).optional(),
-  })).max(24),
+const verdict = z.object({
+  id: z.string(),
+  verdict: z.enum(['supported', 'disputed', 'rejected']),
+  scope: z.enum(['context', 'observed']).optional(),
+  relation: z.enum(['prior', 'recorded-decision', 'later', 'uncertain', 'observed']).optional(),
 });
+const verdictSchema = z.object({ findings: z.array(verdict).max(24) });
+const rawVerdicts = z.object({ findings: z.array(z.unknown()) });
 const holdoutSchema = z.object({
   observations: z.array(z.object({
     step: z.number().int(),
@@ -133,14 +165,18 @@ export async function reviewEvidence(question: string, terms: string[], records:
     const scope = laterThanBoundary(fact.when, start) ? 'observed' as const : fact.scope;
     return [{ claim: { ...fact, scope, citations }, context: found.map(({ title, context }) => ({ title, context })) }];
   });
-  const findings = candidates.length ? verdictSchema.parse(await providers.complete(review, JSON.stringify({
+  const raw = candidates.length ? rawVerdicts.parse(await providers.complete(review, JSON.stringify({
     question, start, claims: candidates,
   }), reviewFormat)).findings : [];
+  const findings = raw.slice(0, 24).flatMap((item) => {
+    const parsed = verdict.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
   const reviewed = findings.flatMap(({ id, verdict, scope, relation }) => {
     const item = candidates.find(({ claim }) => claim.id === id);
     if (!item || findings.filter((finding) => finding.id === id).length !== 1 || verdict === 'rejected' || relation === 'uncertain') return [];
     if (verdict === 'disputed' && new Set(item.claim.citations.map(({ source }) => source)).size < 2) return [];
-    return [{ ...item.claim, status: verdict, scope: item.claim.scope === 'observed' || scope === 'observed' || relation === 'later' ? 'observed' as const : 'context' as const }];
+    return [{ ...item.claim, status: verdict, scope: item.claim.scope === 'observed' || scope === 'observed' || relation === 'later' || relation === 'observed' ? 'observed' as const : 'context' as const }];
   });
   return {
     start, end, interpretation: extracted.interpretation,
@@ -191,18 +227,19 @@ const alignmentSchema = z.object({
 });
 const alignmentFormat = outputSchema(alignmentSchema);
 
-export async function auditIntervention(question: string, model: Model, dossier: Dossier, providers: Providers) {
+export async function auditIntervention(question: string, model: Model, dossier: Dossier, providers: Providers, scope: string, assumptions: Bundle['claims'], intent: StudyIntent) {
   const metric = model.metrics.find(({ id }) => id === model.forecast?.metric);
   const earlier = dossier.context.filter(({ status }) => status === 'supported');
   const reply = alignmentSchema.parse(await providers.complete([
     'Return JSON intervention audit: {"accepted":true,"issues":[]}. Compare the candidate intervention to the user question and the provided pre-decision evidence.',
     'Reject if the recorded branch cites the historical outcome rather than the actual decision, if the changed branch modifies a different person or action, or if a decision label presupposes the outcome being tested.',
-    'Reject if a represented prerequisite is claimed to be required without real textual support. A model explicitly inspecting one defensible necessary condition is allowed. Reject if the audit date or the identity of the decision is inconsistent with the supplied evidence.',
+    'Check that the actor changed by the question is actually represented and that the recipient is the actor whose response the question asks about. A stated prerequisite cannot simply restate the hypothesized change, the target outcome, or assume the old condition still holds after explicitly removing it. Reject if a represented prerequisite is claimed to be required without real textual support. A model explicitly inspecting one defensible necessary condition is allowed. Reject if the audit date or the identity of the decision is inconsistent with the supplied evidence.',
     'You have no later evidence. Do not add facts from memory. Return brief issues in the language of the question and use only the given fields and claims.',
   ].join('\n'), JSON.stringify({
-    question, start: dossier.start, end: dossier.end, decisionPoint: model.decisionPoint,
+    question, lockedIntent: intent, start: dossier.start, end: dossier.end, decisionPoint: model.decisionPoint,
     decisionBasis: model.decisionBasis, decisions: model.decisions, metric,
-    context: earlier, namedConditions: model.variables.filter(({ role }) => role === 'parameter')
+    context: earlier, scope, actors: model.actors, assumptions: assumptions.map(({ id, text }) => ({ id, text })),
+    namedConditions: model.variables.filter(({ role }) => role === 'parameter')
       .map(({ id, basis, label }) => ({ id, basis, label })),
   }), alignmentFormat));
   if (!reply.accepted) throw new Error(reply.issues.join(' ').slice(0, 1200) || '核心决策或条件缺少一致的证据。');

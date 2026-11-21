@@ -46,7 +46,7 @@ npm run simulate -- public/examples/alaska-1867.json --scenario share-40
 
 ## 验证状态
 
-[岳飞案例的史料核对与手工复算](docs/yue-fei-audit.md)。
+[岳飞案例的史料核对与手工复算](docs/yue-fei-audit.md) · [新版推演验收记录](docs/research-validation.md)。
 
 预览版包含跨领域的独立演示、证据与规则测试，以及用替身服务运行的检索和建模接口测试。真实在线检索和模型的六题盲测是正式发布 `v0.1.0` 的验收项，题目在 [测试清单](test/live-questions.json) 中。逐题运行 `research`，核查每条关键引文、分岔点和规则，再用 `simulate` 断网复算。
 

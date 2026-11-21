@@ -33,6 +33,12 @@ export function drawHistoricalStudy(
   const note = el('p', 'model-note', audit.interpretation);
   note.append(references(bundle, model.decisionBasis));
   section.append(window, note);
+  if (audit.intent?.change || audit.intent?.outcome) {
+    const anchor = el('div', 'study-intent');
+    if (audit.intent.change) anchor.append(el('p', undefined, '改动 · ' + audit.intent.change));
+    if (audit.intent.outcome) anchor.append(el('p', undefined, '观察 · ' + audit.intent.outcome));
+    section.append(anchor);
+  }
 
   const check = el('div', 'study-check');
   check.dataset.result = checked.status;

@@ -238,3 +238,4 @@ button.turn-event:hover { border-color: var(--accent); }
 .live-rounds { margin-top: 10px; color: var(--muted); line-height: 1.6; font-size: 13px; }
 .live-round-entry { padding: 6px 0; border-bottom: 1px solid var(--rule); }
 .live-round-entry strong { color: var(--ink); }
+.study-intent { padding: 4px 0 7px; color: var(--muted); font-size: 13px; line-height: 1.55; }

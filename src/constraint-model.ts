@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { Draft } from './schema.ts';
+import { documentedRole } from './historical-evidence.ts';
+import type { StudyIntent } from './historical-evidence.ts';
 import type { Providers } from './provider-core.ts';
 
 const line = z.string().trim().min(1).max(200);
@@ -20,19 +22,23 @@ const compactSchema = z.object({
 const guidance = [
   'Return one JSON object describing a two-party institutional constraint for this historical question, or null if none is supported.',
   'Use keys title, scope, recorded, change, historicalBasis, proposer, receiver, constraint. Each party has name, objective, basis, and the constraint has label, explanation, basis.',
-  'Use only the supplied pre-decision facts and their exact IDs for every basis field. historicalBasis must support the recorded choice, not the eventual outcome. Choose the actual proposer and decision maker with different names.',
+  'If lockedIntent supplies actor names, include these exact names in the appropriate party labels. The proposer is the person or institution whose choice the user changes and the receiver is the party whose reaction the user asks about. Use only the supplied pre-decision facts and their exact IDs for every basis field. historicalBasis must support the recorded choice, not the eventual outcome. Choose the actual proposer and decision maker with different names.',
   'The constraint must be a concrete prerequisite that the receiver can inspect in the proposal, such as satisfying a legal threshold or preserving a specific authority. A description of willingness, support, agreement, success, or the receiver response is not an input constraint.',
   'Use the user language, keep recorded and change focused on the intervention without assuming the outcome. This model tests one necessary constraint, not the probability of ultimate success. Return null if no such source-grounded constraint can be identified.',
 ].join('\n');
 const outputSchema = z.toJSONSchema(compactSchema, { io: 'input', reused: 'ref' });
 
 export async function buildConstraintModel(
-  payload: string, supported: Set<string>, providers: Providers,
+  payload: string, supported: Set<string>, providers: Providers, intent: StudyIntent,
 ): Promise<Draft | undefined> {
   const sketch = compactSchema.safeParse(await providers.complete(guidance, payload, outputSchema));
   if (!sketch.success || !sketch.data) return undefined;
   const { title, scope, recorded, change, historicalBasis, proposer, receiver, constraint } = sketch.data;
-  if (proposer.name === receiver.name || recorded === change ||
+  const source = JSON.parse(payload) as { context: { id: string; text: string }[] };
+  const facts = source.context.filter(({ id }) => supported.has(id)).map(({ text }) => text);
+  const senderTitle = documentedRole(proposer.name, intent.changer, facts);
+  const receiverTitle = documentedRole(receiver.name, intent.responder, facts);
+  if (!senderTitle || !receiverTitle || proposer.name === receiver.name || recorded === change ||
       ![historicalBasis, proposer.basis, receiver.basis, constraint.basis].every((id) => supported.has(id))) return undefined;
   const assumption = 'constraint-method';
   if (supported.has(assumption)) return undefined;
@@ -49,8 +55,8 @@ export async function buildConstraintModel(
       horizon: 2, stepLabel: '提出方案、对方检验条件',
       decisionPoint: recorded, decisionBasis: [historicalBasis],
       actors: [
-        { id: 'sender', label: proposer.name, objective: proposer.objective, basis: [proposer.basis] },
-        { id: 'receiver', label: receiver.name, objective: receiver.objective, basis: [receiver.basis] },
+        { id: 'sender', label: senderTitle, objective: proposer.objective, basis: [proposer.basis] },
+        { id: 'receiver', label: receiverTitle, objective: receiver.objective, basis: [receiver.basis] },
       ],
       variables: [
         { id: 'intervention', label: '提案选择', role: 'decision', kind: 'boolean', initial: false, basis: [historicalBasis] },

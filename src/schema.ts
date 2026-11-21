@@ -103,6 +103,8 @@ const observationSchema = z.strictObject({
 const auditSchema = z.strictObject({
   start: label, end: label, interpretation: prose,
   historicalScenario: id,
+  coverage: z.enum(['full', 'prerequisite']).optional(),
+  intent: z.object({ changer: label.optional(), responder: label.optional(), change: prose.optional(), outcome: prose.optional() }).optional(),
   observations: z.array(observationSchema).max(12),
 });
 export type HistoricalAudit = z.infer<typeof auditSchema>;

@@ -338,7 +338,9 @@ function drawForecast(bundle: Bundle, analysis: Simulation) {
   const section = el('section', 'monitor');
   section.id = 'outcomes';
   const outcomeLabel = model.metrics.find(({ id }) => id === spec.metric)!.label;
-  section.append(el('h3', undefined, forecast.observations ? '可能走向与模型概率' : '可能走向'));
+  const heading = bundle.audit?.coverage === 'prerequisite' ? '必要条件检查' :
+    forecast.observations ? '可能走向与模型概率' : '可能走向';
+  section.append(el('h3', undefined, heading));
   const classified = forecast.outcomes.filter(({ scenarios }) => scenarios.length);
   const assessed = model.scenarios.length - forecast.unclassifiedScenarios.length;
   const summary = classified.length === 0 ? '当前资料下，所有已建模情景的这个结果都待定。' :
