@@ -277,9 +277,16 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
   if (forecast) {
     const outcome = metrics.get(forecast.metric);
     const field = outcome && fields.get(outcome.field);
-    if (!branches.has(forecast.decision) || forecast.decision === model.decisions[0].id ||
-        !field || field.kind === 'number' || field.role !== 'state') {
-      throw new Error('Forecast needs a non-baseline decision and a categorical or boolean outcome state');
+    if (!branches.has(forecast.decision) || forecast.decision === model.decisions[0].id) {
+      throw new Error('forecast.decision must be an alternative branch ID: ' + model.decisions.slice(1).map(({ id }) => id).join(', '));
+    }
+    if (!field || field.kind === 'number' || field.role !== 'state') {
+      const outcomes = model.metrics.filter(({ field }) => {
+        const variable = fields.get(field);
+        return variable?.role === 'state' && variable.kind !== 'number';
+      });
+      throw new Error('forecast.metric must name a metric that reads a boolean or categorical state. Eligible metric IDs: ' +
+        (outcomes.map(({ id }) => id).join(', ') || 'none; define such a state and a metric for it'));
     }
     if (new Set(forecast.factors.map(({ kind }) => kind)).size !== factorKinds.length) {
       throw new Error('Forecast factors must cover internal, external, strategy and weather once each');

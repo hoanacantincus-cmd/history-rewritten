@@ -36,6 +36,7 @@ const modelPrompt = [
   'Use the actor and visibility fields to ensure actors respond only to information they could have received. A field with no visibility map is public; missing actors in a map cannot see it.',
   'For strategic interactions define separate agents with feasible actions and dimensionless utilities in model.policies. Policy targets are boolean or categorical state fields separate from ordinary rule targets. Each policy chooses the best supported action against the previous state. Document every payoff as evidence or an explicit assumption; unknown or tied choices stay unresolved.',
   'For a ready model include forecast with the requested non-baseline decision, one categorical or boolean outcome metric, and four factor assessments: internal, external, strategy, weather. Mark factors modeled, unresolved, or irrelevant and cite their rationale. For modeled factors list the fields that actually represent them.',
+  'Example: decisions IDs historical and delay-vote, variables IDs delay and union-active, metrics:[{"id":"union-survives","label":"Union survives","field":"union-active"}], forecast.decision:"delay-vote", forecast.metric:"union-survives". The forecast names the changed branch ID and metric ID. The metric must measure a boolean or category state, never the intervention or an intermediate numeric measure.',
   'If the factual outcome of the forecast metric is recorded over the same window, set forecast.baselineCheck with that exact outcome value and a supported claim ID. It is used only to check the simulated baseline. It does not feed the rules.',
   'Do not predict precise historical weather from modern averages. Distinguish dated reports, reanalysis, and unweighted weather scenarios. If a relevant factor is unavailable, surface that as unknown or an explicit assumption.',
   'Omit forecast.weights unless a historical source records actual counts for EACH disjoint joint scenario, or documents a random mechanism with verifiable counts of equiprobable outcomes. Each count must appear as digits in the supporting quote. State why those counts transfer to this intervention. Do not invent priors, percentages, or equal weights as a default.',
@@ -199,7 +200,26 @@ export async function research(
       if (quoteErrors.length && !draft.claims.some((claim) => claim.status === 'supported')) throw new Error(quoteErrors[0]);
       if (quoteErrors.length && draft.gaps.length < 16) draft.gaps.push('部分自动摘录未能匹配原文，相应说法已标为假设。');
       if (draft.model) {
-        const baseline = draft.model.decisions[0];
+        const model = draft.model;
+        const baseline = model.decisions[0];
+        const forecast = model.forecast;
+        if (forecast) {
+          const intervention = model.variables.find(({ role }) => role === 'decision');
+          if (model.decisions.length === 2 && [intervention?.id, baseline.id].includes(forecast.decision)) {
+            forecast.decision = model.decisions[1].id;
+          }
+          if (!model.metrics.some(({ id }) => id === forecast.metric)) {
+            const field = model.variables.find(({ id, role, kind }) =>
+              id === forecast.metric && role === 'state' && kind !== 'number');
+            if (field) {
+              const metrics = model.metrics.filter((metric) => metric.field === field.id);
+              if (metrics.length === 1) forecast.metric = metrics[0].id;
+              else if (!metrics.length && model.metrics.length < 8 && field.id !== 'all') {
+                model.metrics.push({ id: field.id, field: field.id, label: field.label });
+              }
+            }
+          }
+        }
         const intervention = draft.model.variables.find((field) => field.role === 'decision');
         if (intervention) intervention.initial = baseline.value;
         // The stated horizon controls which proposed transitions can occur.

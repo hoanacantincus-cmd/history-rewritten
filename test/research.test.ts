@@ -246,3 +246,14 @@ test('public endpoint accepts a custom question from Pages and streams validated
   assert.equal(capped.status, 429);
   assert(Number(capped.headers.get('Retry-After')) > 0);
 });
+
+test('generated forecast references resolve to an existing alternative and equivalent outcome metric', async () => {
+  const draft = modeled('Forecast references');
+  draft.model.forecast.decision = 'action';
+  draft.model.metrics[1].id = 'final-ending';
+  const bundle = await research({ question: 'If the decision changed, would the treaty pass?' }, providers(draft));
+  assert.equal(bundle.status, 'ready');
+  assert.equal(bundle.model?.forecast?.decision, 'change');
+  assert.equal(bundle.model?.forecast?.metric, 'final-ending');
+  assert.equal(simulate(bundle).comparisons[0].delta, 1);
+});
