@@ -222,7 +222,7 @@ test('public client and shared quotas are enforced by the same SQLite statement'
   const a = () => publicRequest('198.51.100.1');
   assert.deepEqual((await Promise.all([reserveRun(env, a(), now), reserveRun(env, a(), now)])).map((item) => item.allowed).sort(), [false, true]);
   assert.equal((await reserveRun(env, publicRequest('198.51.100.2'), now)).allowed, true);
-  assert.deepEqual(await reserveRun(env, publicRequest('198.51.100.3'), now), { allowed: false, retryAfter: 10 });
+  assert.deepEqual(await reserveRun(env, publicRequest('198.51.100.3'), now), { allowed: false, scope: 'global', resetAt: '2026-11-22T00:00:00.000Z', retryAfter: 10 });
   assert.equal((await reserveRun(env, a(), new Date('2026-11-22T00:00:00Z'))).allowed, true);
 });
 
@@ -256,4 +256,31 @@ test('generated forecast references resolve to an existing alternative and equiv
   assert.equal(bundle.model?.forecast?.decision, 'change');
   assert.equal(bundle.model?.forecast?.metric, 'final-ending');
   assert.equal(simulate(bundle).comparisons[0].delta, 1);
+});
+
+test('public quota recovery preserves remaining shared capacity and explains the scope of a denial', async (t) => {
+  const env = { DB: publicTestDb(t), DEEPSEEK_API_KEY: 'fixture' };
+  const fetch = publicFetch(() => providers(modeled('Quota fixture')));
+  const client = '198.51.100.1';
+  const status = (ip?: string) => fetch(new Request('https://worker.example/api/status', {
+    headers: { Origin: publishedOrigin, ...(ip ? { 'CF-Connecting-IP': ip } : {}) },
+  }), env);
+  for (let i = 0; i < 3; i++) assert.equal((await reserveRun(env, publicRequest(client))).allowed, true);
+  const afterTests = await (await status(client)).json();
+  assert.equal(afterTests.quota.networkRemaining, 3);
+  assert.equal(afterTests.quota.globalRemaining, 9);
+  for (let i = 0; i < 3; i++) assert.equal((await reserveRun(env, publicRequest(client))).allowed, true);
+  const network = await fetch(publicRequest(client), env);
+  assert.equal(network.status, 429);
+  assert.equal((await network.json()).scope, 'network');
+
+  const anonymous = publicRequest('');
+  anonymous.headers.delete('CF-Connecting-IP');
+  for (let i = 0; i < 6; i++) assert.equal((await reserveRun(env, anonymous)).allowed, true);
+  const global = await fetch(publicRequest('198.51.100.2'), env);
+  assert.equal(global.status, 429);
+  const error = await global.json();
+  assert.equal(error.scope, 'global');
+  assert.ok(Date.parse(error.resetAt) > Date.now());
+  assert.equal((await (await status()).json()).quota.networkRemaining, null);
 });

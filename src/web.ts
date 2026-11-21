@@ -539,8 +539,14 @@ async function readResearch(response: Response, onProgress: (event: ResearchProg
   if (!response.ok || !response.headers.get('content-type')?.includes('application/x-ndjson')) {
     const data: unknown = await response.json().catch(() => null);
     if (!response.ok || !data) {
-      const message = (data as { error?: string } | null)?.error;
-      throw new Error(message ?? '分析服务暂时不可用，请稍后重试。');
+      const details = data as { error?: string; resetAt?: string } | null;
+      const message = details?.error ?? '分析服务暂时不可用，请稍后重试。';
+      const reset = typeof details?.resetAt === 'string' ? Date.parse(details.resetAt) : NaN;
+      if (response.status === 429 && Number.isFinite(reset)) {
+        const time = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(reset);
+        throw new Error(message + '额度将在 ' + time + '（本地时间）恢复，案例仍可复算。');
+      }
+      throw new Error(message);
     }
     return data;
   }

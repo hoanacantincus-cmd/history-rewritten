@@ -91,24 +91,52 @@ function limit(value: string | undefined, fallback: number, maximum: number) {
   return Number.isInteger(number) && number > 0 && number <= maximum ? number : fallback;
 }
 
-export async function reserveRun(env: PublicEnvironment, request: Request, now = new Date()) {
-  const date = now.toISOString().slice(0, 10);
+async function quotaFor(env: PublicEnvironment, request: Request, now: Date) {
+  const day = now.toISOString().slice(0, 10);
+  const reset = Date.parse(day + 'T00:00:00Z') + 86_400_000;
   const globalLimit = limit(env.PUBLIC_DAILY_LIMIT, 12, 100);
-  const clientLimit = Math.min(globalLimit, limit(env.PUBLIC_CLIENT_DAILY_LIMIT, 3, 20));
-  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-  const encoder = new TextEncoder();
-  const secret = await crypto.subtle.importKey('raw', encoder.encode('history-rewritten-quota:' + (env.DEEPSEEK_API_KEY ?? '')),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const bytes = await crypto.subtle.sign('HMAC', secret, encoder.encode(date + ':' + ip));
-  const client = Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const ip = request.headers.get('CF-Connecting-IP')?.trim();
+  const clientLimit = ip ? Math.min(globalLimit, limit(env.PUBLIC_CLIENT_DAILY_LIMIT, 6, 20)) : null;
+  let client = 'unidentified';
+  if (ip) {
+    const encoder = new TextEncoder();
+    const secret = await crypto.subtle.importKey('raw', encoder.encode('history-rewritten-quota:' + (env.DEEPSEEK_API_KEY ?? '')),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const bytes = await crypto.subtle.sign('HMAC', secret, encoder.encode(day + ':' + ip));
+    client = Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return { day, client, globalLimit, clientLimit, resetAt: new Date(reset).toISOString(),
+    retryAfter: Math.ceil((reset - now.getTime()) / 1000) };
+}
+
+async function remainingQuota(db: QuotaDatabase, quota: Awaited<ReturnType<typeof quotaFor>>) {
+  const counts = await db.prepare(
+    'SELECT count(*) AS total, count(CASE WHEN client = ?2 THEN 1 END) AS network FROM public_runs WHERE day = ?1',
+  ).bind(quota.day, quota.client).first<{ total: number; network: number }>();
+  if (!counts) throw new Error('Daily totals unavailable');
+  return {
+    globalRemaining: Math.max(0, quota.globalLimit - counts.total),
+    networkRemaining: quota.clientLimit === null ? null : Math.max(0, quota.clientLimit - counts.network),
+    resetAt: quota.resetAt,
+  };
+}
+
+export async function reserveRun(env: PublicEnvironment, request: Request, now = new Date()) {
+  const quota = await quotaFor(env, request, now);
   // A single conditional write makes admission atomic across Worker instances.
   const admitted = await env.DB!.prepare(
     'INSERT INTO public_runs (id, day, client) SELECT ?3, ?1, ?2 ' +
     'WHERE (SELECT count(*) FROM public_runs WHERE day = ?1) < ?4 ' +
     'AND (SELECT count(*) FROM public_runs WHERE day = ?1 AND client = ?2) < ?5 RETURNING id',
-  ).bind(date, client, crypto.randomUUID(), globalLimit, clientLimit).first<{ id: string }>();
-  const retryAfter = Math.ceil((Date.parse(date + 'T00:00:00Z') + 86_400_000 - now.getTime()) / 1000);
-  return { allowed: Boolean(admitted), retryAfter };
+  ).bind(quota.day, quota.client, crypto.randomUUID(), quota.globalLimit, quota.clientLimit ?? quota.globalLimit)
+    .first<{ id: string }>();
+  if (admitted) return { allowed: true as const };
+  const remaining = await remainingQuota(env.DB!, quota);
+  return {
+    allowed: false as const,
+    scope: remaining.globalRemaining === 0 ? 'global' : 'network',
+    resetAt: quota.resetAt, retryAfter: quota.retryAfter,
+  };
 }
 
 export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSignal) => Providers = (env, signal) => configureHttpProviders({
@@ -133,7 +161,13 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
       return new Response(null, { status: 204, headers: cors });
     }
     const ready = Boolean(env.DB && env.DEEPSEEK_API_KEY?.trim());
-    if (route.pathname === '/api/status' && request.method === 'GET') return send({ mode: 'public', ready }, ready ? 200 : 503);
+    if (route.pathname === '/api/status' && request.method === 'GET') {
+      if (!ready || !env.DB) return send({ mode: 'public', ready: false }, 503);
+      try {
+        const quota = await remainingQuota(env.DB, await quotaFor(env, request, new Date()));
+        return send({ mode: 'public', ready: true, quota });
+      } catch { return send({ mode: 'public', ready: false }, 503); }
+    }
     if (route.pathname !== '/api/research' || request.method !== 'POST') return send({ error: 'Not found' }, 404);
     if (origin !== siteOrigin) return send({ error: '请从历史改写公开页发起请求。' }, 403);
     if (!ready) return send({ error: '公开推演服务正在准备，请稍后再试。' }, 503);
@@ -168,7 +202,10 @@ export function publicFetch(provide: (env: PublicEnvironment, signal: AbortSigna
 
     try {
       const quota = await reserveRun(env, request);
-      if (!quota.allowed) return send({ error: '今日公开推演额度已用完，案例仍可复算。' }, 429, { 'Retry-After': String(quota.retryAfter) });
+      if (!quota.allowed) {
+        const error = quota.scope === 'global' ? '今天的全站推演额度已用完。' : '当前网络今天的推演额度已用完。';
+        return send({ error, scope: quota.scope, resetAt: quota.resetAt }, 429, { 'Retry-After': String(quota.retryAfter) });
+      }
     } catch { return send({ error: '公开服务的用量控制暂不可用，请稍后重试。' }, 503); }
 
     const body = new TransformStream<Uint8Array>();
