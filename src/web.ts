@@ -2,14 +2,25 @@ import './style.css';
 import { parseBundle } from './schema.ts';
 import type { Bundle, Scalar, Variable } from './schema.ts';
 import { simulate } from './engine.ts';
+import type { Simulation } from './engine.ts';
+import { drawAgentBoard } from './agent-board.ts';
+import { assembleQuestion, questionParts } from './question.ts';
+import { researchPhases } from './research-progress.ts';
+import type { ResearchPhase, ResearchProgress } from './research-progress.ts';
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = byId<HTMLDivElement>('status');
 const results = byId<HTMLElement>('results');
 const form = byId<HTMLFormElement>('research-form');
-const question = byId<HTMLTextAreaElement>('question');
+const question = byId<HTMLInputElement>('question');
+const consequence = byId<HTMLInputElement>('consequence');
+const progressPanel = byId<HTMLElement>('work-progress');
 const input = byId<HTMLInputElement>('import');
 const researchButton = byId<HTMLButtonElement>('research-button');
+const sample = { change: '岳飞得到了皇帝的全部信任', outcome: '南宋将会如何', case: 'yue-fei-1141' };
+const phases = { identify: '确定分岔点', evidence: '查找史料', model: '建立模型', check: '校验并复算' };
+let selfHosted = false;
+let examplePrepared = false;
 let selectedDemo: string | undefined;
 let operation = 0;
 
@@ -44,6 +55,7 @@ const factorStatus = { modeled: '已建模', unresolved: '资料不足', irrelev
 
 function setBundle(data: unknown, demo?: string) {
   const bundle = parseBundle(data);
+  progressPanel.hidden = true;
   selectedDemo = demo;
   document.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.case === demo));
@@ -61,6 +73,13 @@ function references(bundle: Bundle, ids: string[]) {
     const link = el('a', undefined, '[' + (position + 1) + ']');
     link.href = '#claim-' + id;
     link.setAttribute('aria-label', '证据 ' + (position + 1));
+    link.addEventListener('click', () => {
+      let ancestor = document.getElementById('claim-' + id)?.parentElement;
+      while (ancestor) {
+        if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+        ancestor = ancestor.parentElement;
+      }
+    });
     holder.append(link, ' ');
   }
   return holder;
@@ -293,10 +312,10 @@ function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.
   return section;
 }
 
-function drawForecast(bundle: Bundle, horizon?: number) {
+function drawForecast(bundle: Bundle, analysis: Simulation) {
   const model = bundle.model!;
   const spec = model.forecast!;
-  const forecast = simulate(bundle, { horizon }).forecast!;
+  const forecast = analysis.forecast!;
   const section = el('section', 'monitor');
   section.append(el('h3', undefined, forecast.observations ? '可能走向与模型概率' : '可能走向'));
   section.append(el('p', 'model-note', model.metrics.find(({ id }) => id === spec.metric)!.label));
@@ -345,6 +364,29 @@ function drawForecast(bundle: Bundle, horizon?: number) {
   return section;
 }
 
+function drawProcess(bundle: Bundle, analysis: Simulation) {
+  const section = el('section', 'monitor');
+  section.append(el('h3', undefined, '推演过程'));
+  const model = bundle.model!;
+  const stages = el('ol', 'phase-list');
+  const entries: { phase: ResearchPhase; detail: string; basis?: string[] }[] = [
+    { phase: 'identify', detail: model.decisionPoint, basis: model.decisionBasis },
+    { phase: 'evidence', detail: bundle.claims.filter(({ status }) => status === 'supported').length +
+        ' 项有来源的主张；' + bundle.claims.filter(({ status }) => status === 'assumption').length + ' 项建模假设。' },
+    { phase: 'model', detail: model.actors.length + ' 个智能体，' + model.scenarios.length + ' 组情景。各分支在同一组条件下比较。' },
+    { phase: 'check', detail: analysis.runs.length + ' 条模拟轨迹。' +
+      (analysis.forecast?.baseline === 'disagrees' ? '史实基线有冲突，需复核。' : '可逐步查看状态变化和依据。') },
+  ];
+  for (const entry of entries) {
+    const item = el('li');
+    item.append(el('strong', undefined, phases[entry.phase]), el('span', undefined, entry.detail));
+    if (entry.basis) item.append(references(bundle, entry.basis));
+    stages.append(item);
+  }
+  section.append(stages);
+  return section;
+}
+
 function render(bundle: Bundle, scenario?: string, horizon?: number) {
   const heading = el('h2', undefined, bundle.title);
   heading.id = 'results-title';
@@ -363,8 +405,13 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
   };
   header.append(heading, button);
   results.replaceChildren(header, el('p', 'result-scope', bundle.scope));
-  if (bundle.model?.forecast) results.append(drawForecast(bundle, horizon));
-  else if (!bundle.model && bundle.status === 'insufficient') results.append(el('p', 'model-note', '目前史料不足以估计历史走向的概率。'));
+  if (bundle.model) {
+    const analysis = simulate(bundle, { horizon });
+    results.append(drawProcess(bundle, analysis), drawAgentBoard(bundle, analysis, references));
+    if (analysis.forecast) results.append(drawForecast(bundle, analysis));
+  } else if (bundle.status === 'insufficient') {
+    results.append(el('p', 'model-note', '还没有通过校验的模型。下方保留可查的史料和缺口。'));
+  }
   if (bundle.status === 'clarification') {
     const section = el('section', 'monitor');
     section.append(el('h3', undefined, '选择要分析的问题'));
@@ -373,8 +420,9 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
       const use = el('button', 'button secondary', option.label);
       use.type = 'button';
       use.onclick = () => {
-        if (form.hidden) { say(option.question); return; }
-        question.value = option.question.replace(/^如果\s*/u, '');
+        const parts = questionParts(option.question);
+        question.value = parts.change;
+        consequence.value = parts.outcome;
         form.requestSubmit();
       };
       line.append(use, references(bundle, option.basis));
@@ -406,23 +454,35 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
   } else results.append(record, viewSources(bundle));
 }
 
+async function openCase(demo: string) {
+  const id = ++operation;
+  progressPanel.hidden = true;
+  say('载入案例…');
+  try {
+    const response = await fetch(import.meta.env.BASE_URL + 'examples/' + demo + '.json');
+    if (!response.ok) throw new Error('案例暂时无法读取。');
+    const data: unknown = await response.json();
+    if (id === operation) { setBundle(data, demo); say(); }
+  } catch (error) { if (id === operation) say(errorText(error)); }
+}
 document.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((card) => {
-  card.addEventListener('click', async () => {
-    const id = ++operation;
-    say('载入案例…');
-    try {
-      const response = await fetch(import.meta.env.BASE_URL + 'examples/' + card.dataset.case + '.json');
-      if (!response.ok) throw new Error('案例暂时无法读取。');
-      const data: unknown = await response.json();
-      if (id === operation) { setBundle(data, card.dataset.case); say(); }
-    } catch (error) { if (id === operation) say(errorText(error)); }
-  });
+  card.addEventListener('click', () => { if (card.dataset.case) void openCase(card.dataset.case); });
 });
+
+byId<HTMLButtonElement>('sample-question').onclick = () => {
+  question.value = sample.change;
+  consequence.value = sample.outcome;
+  examplePrepared = true;
+  say('已填入岳飞案例。提交即可复算这个示例。');
+  question.focus();
+};
+question.oninput = consequence.oninput = () => { examplePrepared = false; };
 
 input.addEventListener('change', async () => {
   const file = input.files?.[0];
   if (!file) return;
   const id = ++operation;
+  progressPanel.hidden = true;
   try {
     if (file.size > 1_000_000) throw new Error('分析包超过 1 MB。');
     const data: unknown = JSON.parse(await file.text());
@@ -430,26 +490,99 @@ input.addEventListener('change', async () => {
   } catch (error) { if (id === operation) say('导入失败。' + errorText(error)); }
   finally { input.value = ''; }
 });
-byId<HTMLButtonElement>('local-import').onclick = () => input.click();
+
+function progressView() {
+  const current = new Map<ResearchPhase, string>();
+  const heading = el('h2', undefined, '推演进度');
+  const prompt = el('p', 'model-note');
+  prompt.setAttribute('aria-live', 'polite');
+  const stepList = el('ol', 'phase-list');
+  const sources = el('div', 'progress-refs');
+  progressPanel.replaceChildren(heading, prompt, stepList, sources);
+  progressPanel.hidden = false;
+  progressPanel.focus();
+  progressPanel.scrollIntoView({ block: 'start' });
+  return (event: ResearchProgress) => {
+    current.set(event.phase, event.detail);
+    prompt.textContent = event.detail;
+    stepList.replaceChildren(...researchPhases.map((phase) => {
+      const item = el('li');
+      item.dataset.phase = phase === event.phase ? 'current' : current.has(phase) ? 'done' : 'waiting';
+      item.append(el('strong', undefined, phases[phase]), el('span', undefined, current.get(phase) ?? '等待'));
+      return item;
+    }));
+    if (event.sources?.length) {
+      sources.replaceChildren();
+      for (const item of event.sources) {
+        let url: URL;
+        try { url = new URL(item.url); } catch { continue; }
+        if (!['https:', 'http:'].includes(url.protocol)) continue;
+        const link = el('a', undefined, item.title);
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        sources.append(link);
+      }
+    }
+  };
+}
+
+async function readResearch(response: Response, onProgress: (event: ResearchProgress) => void): Promise<unknown> {
+  if (!response.ok || !response.headers.get('content-type')?.includes('application/x-ndjson')) {
+    const data: unknown = await response.json();
+    if (!response.ok) throw new Error((data as { error?: string }).error ?? '分析服务暂时不可用。');
+    return data;
+  }
+  if (!response.body) throw new Error('分析服务未返回推演记录。');
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pending = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      pending += chunk.value;
+      const lines = pending.split('\n');
+      pending = lines.pop()!;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const record = JSON.parse(line) as
+          { type: 'progress'; progress: ResearchProgress } |
+          { type: 'result'; bundle: unknown } | { type: 'error'; error: string };
+        if (record.type === 'progress') onProgress(record.progress);
+        if (record.type === 'error') throw new Error(record.error);
+        if (record.type === 'result') return record.bundle;
+      }
+    }
+  } finally { await reader.cancel().catch(() => undefined); }
+  throw new Error('推演连接提前结束，请稍后再试。');
+}
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (researchButton.disabled) return;
-  const condition = question.value.trim().replace(/^如果\s*/u, '');
-  if (!condition) { say('请在「如果」后面写下你想改写的历史。'); return; }
+  const prompt = assembleQuestion(question.value, consequence.value);
+  if (!prompt) { say('请在「如果」后填入你想改变的历史条件。'); return; }
+  const matchesSample = prompt === assembleQuestion(sample.change, sample.outcome) ||
+    (!consequence.value.trim() && question.value.trim() === sample.change);
+  if (matchesSample && (examplePrepared || !selfHosted)) { void openCase(sample.case); return; }
+  if (!selfHosted) {
+    say('这道新题需要自托管版。公开页可以先用岳飞示例查看推演过程。');
+    return;
+  }
   const operationId = ++operation;
   researchButton.disabled = true;
-  say('正在查找史料并构建分析，通常需要一点时间。');
+  say();
+  const track = progressView();
+  track({ phase: 'identify', detail: '正在提交历史问题。' });
   try {
     const response = await fetch('/api/research', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: '如果' + condition }),
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+      body: JSON.stringify({ question: prompt }),
     });
-    const data: unknown = await response.json();
-    if (!response.ok) throw new Error((data as { error?: string }).error ?? '分析服务暂时不可用。');
+    const data = await readResearch(response, (event) => { if (operationId === operation) track(event); });
     if (operationId === operation) { setBundle(data); say(); }
   } catch (error) {
-    if (operationId === operation) say(errorText(error));
+    if (operationId === operation) { progressPanel.hidden = true; say(errorText(error)); }
   } finally { researchButton.disabled = false; }
 });
 
@@ -458,8 +591,8 @@ if (import.meta.env.VITE_DEMO_ONLY !== 'true') {
     if (!response.ok) return;
     const data = await response.json() as { mode?: string };
     if (data.mode !== 'self-hosted') return;
-    form.hidden = false;
-    byId('demo-entry').hidden = true;
+    selfHosted = true;
+    researchButton.textContent = '开始推演 →';
     byId('mode-note').textContent = '研究在这台自托管服务上运行。导出的分析包可离线复算。';
   }).catch(() => { /* A static host renders the public demo. */ });
 }

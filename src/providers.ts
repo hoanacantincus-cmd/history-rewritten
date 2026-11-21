@@ -2,6 +2,7 @@ import { lookup } from 'node:dns';
 import { isIP } from 'node:net';
 import { load } from 'cheerio';
 import ipaddr from 'ipaddr.js';
+import { jsonrepair } from 'jsonrepair';
 import { Agent, fetch as request } from 'undici';
 
 export type Page = { url: string; title: string; text: string; references?: string[] };
@@ -71,12 +72,18 @@ export function decodeCompletion(content: string): unknown {
         else if (char === '"') quoted = false;
       } else if (char === '"') quoted = true;
       else if (char === '{') depth++;
-      else if (char === '}' && --depth === 0) return JSON.parse(content.slice(start, i + 1)) as unknown;
+      else if (char === '}' && --depth === 0) {
+        const object = content.slice(start, i + 1);
+        try { return JSON.parse(object) as unknown; }
+        catch { return JSON.parse(jsonrepair(object)) as unknown; }
+      }
     }
     // The provider has reported completed responses with the nested model closed
     // but without the final envelope brace. The caller still validates the full schema.
     if (depth === 1 && !quoted && content.trimEnd().endsWith('}')) {
-      return JSON.parse(content.slice(start) + '}') as unknown;
+      const object = content.slice(start) + '}';
+      try { return JSON.parse(object) as unknown; }
+      catch { return JSON.parse(jsonrepair(object)) as unknown; }
     }
     throw original;
   }
@@ -223,7 +230,8 @@ export function configureProviders(env: NodeJS.ProcessEnv = process.env): Provid
         signal: AbortSignal.timeout(90_000),
       });
       if (!response.ok) throw new Error('Model provider returned HTTP ' + response.status);
-      const dataObject = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const dataObject = await response.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> };
+      if (dataObject.choices?.[0]?.finish_reason === 'length') throw new Error('Model response exceeded its output limit');
       const output = dataObject.choices?.[0]?.message?.content;
       if (!output?.trim()) throw new Error('Model provider did not return a JSON object');
       return decodeCompletion(output);

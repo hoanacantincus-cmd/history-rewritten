@@ -3,6 +3,7 @@ import { draftJsonSchema, draftSchema, ForecastEvidenceError, parseBundle, reque
 import type { Bundle, Draft, ResearchRequest, Source } from './schema.ts';
 import { normalizeText } from './providers.ts';
 import type { Page, Providers } from './providers.ts';
+import type { ResearchProgress } from './research-progress.ts';
 
 const term = z.string().trim().min(1).max(250);
 const planSchema = z.object({ title: z.string().trim().min(1).max(200), topics: z.array(term).optional(),
@@ -131,10 +132,15 @@ async function getEvidence(
   return { records, unavailable };
 }
 
-export async function research(input: unknown, providers: Providers, accessed = new Date().toISOString().slice(0, 10)): Promise<Bundle> {
+export async function research(
+  input: unknown, providers: Providers, accessed = new Date().toISOString().slice(0, 10),
+  report?: (progress: ResearchProgress) => void,
+): Promise<Bundle> {
   const query = requestSchema.parse(input);
+  report?.({ phase: 'identify', detail: '正在识别要改变的决定，以及你想观察的结果。' });
   const plan = planSchema.parse(await providers.complete(planningPrompt, JSON.stringify({ question: query.question })));
   const terms = [...new Set([...(plan.topics?.slice(0, 2) ?? []), ...plan.queries])].slice(0, 6);
+  report?.({ phase: 'evidence', detail: '正在查找并读取相关史料。' });
   const searches = await Promise.allSettled(terms.map((term) => providers.search(term)));
   const results = searches.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
   const { records, unavailable } = await getEvidence(query.sources, results, providers, accessed);
@@ -147,6 +153,11 @@ export async function research(input: unknown, providers: Providers, accessed = 
       gaps: ['没有取得可阅读的史料正文，现有材料不足以推演。'],
     });
   }
+  report?.({
+    phase: 'model',
+    detail: '已读到 ' + records.length + ' 份材料，正在建立历史基线、各方行动与条件情景。',
+    sources: common.sources.slice(0, 6).map(({ title, url }) => ({ title, url })),
+  });
   const modelData = { question: query.question, evidence: records.map((item) => ({ ...item.source, text: item.text })) };
   const schema = draftJsonSchema();
   const instructions = modelPrompt + '\nSCHEMA\n' + JSON.stringify(schema);
@@ -246,6 +257,7 @@ export async function research(input: unknown, providers: Providers, accessed = 
       grounded = draft;
       if (unavailable && draft.gaps.length < 16) draft.gaps.push('部分来源正文未能读取，可用原文摘录补充。');
       if (!results.length && query.sources.length && draft.gaps.length < 16) draft.gaps.push('本次依赖用户提供的史料，自动检索未能完成。');
+      report?.({ phase: 'check', detail: '正在核对引文、各方能获得的信息，以及规则能否运行。' });
       try { return parseBundle({ ...draft, ...common }); }
       catch (error) {
         if (!(error instanceof ForecastEvidenceError) || !draft.model?.forecast?.weights) throw error;
@@ -257,6 +269,7 @@ export async function research(input: unknown, providers: Providers, accessed = 
       repair = (error instanceof z.ZodError
         ? error.issues.slice(0, 12).map(({ path, message }) => path.join('.') + ' ' + message).join('\n')
         : error instanceof Error ? error.message : 'Invalid model response').slice(0, 1800);
+      if (attempt < 2) report?.({ phase: 'check', detail: '当前草案需要修订，正在重新核对史料和规则。' });
     }
   }
   if (grounded) {

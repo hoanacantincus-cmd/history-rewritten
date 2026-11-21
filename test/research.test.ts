@@ -110,6 +110,8 @@ test('compatible model responses can contain one complete JSON object followed b
   assert.deepEqual(decodeCompletion('prefix {"text":"quote } \\"","data":{"ok":true}}\n{"status":"extra"}'),
     { text: 'quote } "', data: { ok: true } });
   assert.deepEqual(decodeCompletion('{"status":"ready","model":{"actors":[]}' ), { status: 'ready', model: { actors: [] } });
+  assert.deepEqual(decodeCompletion('{"status":"ready","model":{"actors":[],},}'),
+    { status: 'ready', model: { actors: [] } });
   assert.throws(() => decodeCompletion('{"text":"truncated"'), SyntaxError);
 });
 
@@ -129,6 +131,55 @@ test('local HTTP research can produce a replayable bundle from free-form input',
     assert.equal(response.status, 200);
     assert.equal(simulate(await response.json()).comparisons[0].delta, 1);
   } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('HTTP streams the current research phase before modeling finishes and ends with a bundle', async () => {
+  const driver = providers(modeled('Streamed analysis'));
+  const complete = driver.complete;
+  let finishModel!: () => void;
+  const gate = new Promise<void>((resolve) => { finishModel = resolve; });
+  driver.complete = async (instructions, data) => {
+    if (!instructions.startsWith('Return JSON with title')) await gate;
+    return complete(instructions, data);
+  };
+  const server = createApp(driver);
+  server.listen(0, '127.0.0.1');
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch('http://127.0.0.1:' + address.port + '/api/research', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+      body: JSON.stringify({ question: '如果某次和议改期，外交会怎样？' }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.match(response.headers.get('content-type') ?? '', /ndjson/);
+    const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+    let before = '';
+    while (!before.includes('"phase":"model"')) {
+      const chunk = await reader.read();
+      assert.equal(chunk.done, false);
+      before += chunk.value;
+    }
+    assert.ok(before.includes('"phase":"identify"'));
+    assert.ok(before.includes('"phase":"evidence"'));
+    assert.ok(!before.includes('"type":"result"'));
+    finishModel();
+    let all = before;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      all += chunk.value;
+    }
+    const events = all.trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(events.at(-2).progress.phase, 'check');
+    assert.equal(events.at(-1).type, 'result');
+    assert.equal(simulate(events.at(-1).bundle).status, 'ready');
+  } finally {
+    finishModel();
     server.closeAllConnections();
     server.close();
   }

@@ -14,6 +14,7 @@ const mime: Record<string, string> = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.ico': 'image/x-icon',
 };
 const limit = 180_000;
+const streamType = 'application/x-ndjson';
 
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, {
@@ -59,9 +60,30 @@ export function createApp(providers: Providers = configureProviders(), buildDire
         catch (error) { return json(response, 400, { error: error instanceof Error ? error.message : '请求无效。' }); }
         if (running) return json(response, 409, { error: '已有分析正在运行，请稍后重试。' });
         running = true;
-        try { return json(response, 200, await research(data, providers)); }
-        catch (error) { return json(response, 502, { error: error instanceof Error ? error.message : '分析失败。' }); }
-        finally { running = false; }
+        const stream = (request.headers.accept ?? '').split(',')
+          .some((part) => part.trim().split(';', 1)[0] === streamType);
+        const send = (message: unknown) => {
+          if (!response.destroyed) response.write(JSON.stringify(message) + '\n');
+        };
+        if (stream) {
+          response.writeHead(200, {
+            'Content-Type': streamType + '; charset=utf-8', 'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff', 'X-Accel-Buffering': 'no',
+          });
+          response.flushHeaders();
+        }
+        try {
+          const bundle = await research(data, providers, undefined,
+            stream ? (progress) => send({ type: 'progress', progress }) : undefined);
+          if (!stream) return json(response, 200, bundle);
+          send({ type: 'result', bundle });
+          response.end();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '分析失败。';
+          if (!stream) return json(response, 502, { error: message });
+          send({ type: 'error', error: message });
+          response.end();
+        } finally { running = false; }
       }
       if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: 'Method not allowed' });
       const pathname = decodeURIComponent(url.pathname);

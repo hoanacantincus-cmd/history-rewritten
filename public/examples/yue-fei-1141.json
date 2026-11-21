@@ -1,0 +1,608 @@
+{
+  "schemaVersion": 2,
+  "engineVersion": "2",
+  "status": "ready",
+  "title": "如果岳飞得到了皇帝的全部信任，南宋将会如何？",
+  "question": "如果岳飞得到了皇帝的全部信任，南宋将会如何？",
+  "scope": "这里把「全部信任」落实为宋高宗在绍兴十一年持续授权岳飞参与对金政策。只观察当年对金议和的方向。各方反应是条件假设，地方财政和战争结果仍有未知。",
+  "sources": [
+    {
+      "id": "annals",
+      "title": "《宋史》卷二十九 · 高宗本纪",
+      "url": "https://zh.wikisource.org/wiki/宋史/卷029",
+      "accessed": "2026-11-21",
+      "origin": "web"
+    },
+    {
+      "id": "biography",
+      "title": "《宋史》卷三百六十五 · 岳飞传",
+      "url": "https://zh.wikisource.org/wiki/宋史/卷365",
+      "accessed": "2026-11-21",
+      "origin": "web"
+    }
+  ],
+  "claims": [
+    {
+      "id": "dismissal",
+      "text": "绍兴十一年八月，宋高宗罢岳飞。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年八月",
+          "quote": "甲戌，罷岳飛。乙亥"
+        }
+      ]
+    },
+    {
+      "id": "office",
+      "text": "同年春夏，岳飞曾任枢密副使，秦桧进尚书左仆射并兼枢密使。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年四月",
+          "quote": "俊並爲樞密使，飛樞密副使"
+        },
+        {
+          "source": "annals",
+          "locator": "绍兴十一年六月",
+          "quote": "加秦檜特進，進尚書左僕射"
+        }
+      ]
+    },
+    {
+      "id": "treaty",
+      "text": "当年十一月，宋与金达成和议。",
+      "status": "supported",
+      "scope": "observed",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年十一月",
+          "quote": "是月，與金國和議成，立盟書"
+        }
+      ]
+    },
+    {
+      "id": "yue-position",
+      "text": "据《宋史·岳飞传》，岳飞对议和安排表达过异议。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "biography",
+          "locator": "绍兴九年",
+          "quote": "飛表謝，寓和議不便之意"
+        }
+      ]
+    },
+    {
+      "id": "drought",
+      "text": "本纪记有当年秋七月的旱情与朝廷应对。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年七月",
+          "quote": "以旱，減膳祈禱，遣官"
+        }
+      ]
+    },
+    {
+      "id": "intervention",
+      "text": "用持续的议政授权表示信任提升。皇帝仍须协调朝廷，并且双方仍需同意才能改变和议条款。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "preferences",
+      "text": "岳飞在获授权时会尝试提出调整。秦桧在模型中仍倾向维持原议程，只有朝廷能协调时才送出新议程。选项效用是表示先后顺序的模型假设。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "jin-reaction",
+      "text": "金方对改议的开放程度未知。分别推演愿意重议和维持条件。接受重议只表示谈判重新开始。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "weather-gap",
+      "text": "现有旱情记载不足以量化其对财力或谈判立场的影响。演示保留这一缺口。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    }
+  ],
+  "timeline": [
+    {
+      "when": "绍兴十一年四月",
+      "label": "岳飞任枢密副使",
+      "basis": [
+        "office"
+      ]
+    },
+    {
+      "when": "绍兴十一年八月",
+      "label": "岳飞被罢免",
+      "basis": [
+        "dismissal"
+      ]
+    },
+    {
+      "when": "绍兴十一年十一月",
+      "label": "宋金达成和议",
+      "basis": [
+        "treaty"
+      ]
+    }
+  ],
+  "gaps": [
+    "各方的备选反应和财政约束缺少可校准的联合分布。结果只能按条件列出。",
+    "时间范围为绍兴十一年内，指标是和议方向。"
+  ],
+  "options": [],
+  "model": {
+    "horizon": 5,
+    "stepLabel": "步",
+    "decisionPoint": "绍兴十一年八月，宋高宗是否继续授权岳飞参与对金政策。",
+    "decisionBasis": [
+      "dismissal",
+      "office"
+    ],
+    "actors": [
+      {
+        "id": "emperor",
+        "label": "宋高宗"
+      },
+      {
+        "id": "yue",
+        "label": "岳飞"
+      },
+      {
+        "id": "qin",
+        "label": "秦桧"
+      },
+      {
+        "id": "jin",
+        "label": "金朝使团"
+      }
+    ],
+    "variables": [
+      {
+        "id": "trust",
+        "label": "持续保有议政授权",
+        "kind": "boolean",
+        "role": "decision",
+        "initial": false,
+        "basis": [
+          "dismissal",
+          "intervention"
+        ]
+      },
+      {
+        "id": "coordination",
+        "label": "朝廷能否协调改议",
+        "kind": "boolean",
+        "role": "parameter",
+        "initial": null,
+        "basis": [
+          "preferences"
+        ]
+      },
+      {
+        "id": "openness",
+        "label": "金方愿意重议",
+        "kind": "boolean",
+        "role": "parameter",
+        "initial": null,
+        "basis": [
+          "jin-reaction"
+        ]
+      },
+      {
+        "id": "mandate",
+        "label": "宋高宗给岳飞的授权",
+        "kind": "boolean",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "intervention"
+        ],
+        "visibility": {
+          "yue": 2
+        }
+      },
+      {
+        "id": "proposal",
+        "label": "岳飞提出的议程",
+        "kind": "category",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "yue-position",
+          "preferences"
+        ],
+        "values": [
+          "未提出改议",
+          "提出改议"
+        ],
+        "visibility": {
+          "qin": 3
+        }
+      },
+      {
+        "id": "court-agenda",
+        "label": "南宋使团递交的议程",
+        "kind": "category",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "preferences"
+        ],
+        "values": [
+          "维持原议程",
+          "提交改议"
+        ],
+        "visibility": {
+          "jin": 4
+        }
+      },
+      {
+        "id": "jin-reply",
+        "label": "金方对议程的答复",
+        "kind": "category",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "jin-reaction"
+        ],
+        "values": [
+          "维持原条件",
+          "同意重议"
+        ]
+      },
+      {
+        "id": "diplomacy",
+        "label": "当年对金和议走向",
+        "kind": "category",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "intervention",
+          "jin-reaction"
+        ],
+        "values": [
+          "按原方案议和",
+          "重新商议条款",
+          "谈判暂时僵持"
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "historical",
+        "label": "史实分支 · 罢免岳飞",
+        "value": false,
+        "basis": [
+          "dismissal"
+        ]
+      },
+      {
+        "id": "trusted",
+        "label": "改写分支 · 维持授权",
+        "value": true,
+        "basis": [
+          "intervention"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "open",
+        "label": "朝廷能协调，金方愿重议",
+        "parameters": {
+          "coordination": true,
+          "openness": true
+        },
+        "basis": [
+          "preferences",
+          "jin-reaction"
+        ]
+      },
+      {
+        "id": "closed",
+        "label": "朝廷能协调，金方坚持原条件",
+        "parameters": {
+          "coordination": true,
+          "openness": false
+        },
+        "basis": [
+          "preferences",
+          "jin-reaction"
+        ]
+      },
+      {
+        "id": "court-block",
+        "label": "朝廷无法协调改议",
+        "parameters": {
+          "coordination": false,
+          "openness": true
+        },
+        "basis": [
+          "preferences",
+          "jin-reaction"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "grant",
+        "label": "决定是否维持授权",
+        "target": "mandate",
+        "start": 1,
+        "until": 1,
+        "when": true,
+        "value": {
+          "ref": "trust"
+        },
+        "basis": [
+          "intervention"
+        ],
+        "actor": "emperor"
+      },
+      {
+        "id": "agree-existing",
+        "label": "原议程继续推进",
+        "target": "diplomacy",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "court-agenda"
+            },
+            "维持原议程"
+          ]
+        },
+        "value": "按原方案议和",
+        "basis": [
+          "preferences"
+        ]
+      },
+      {
+        "id": "reopen-terms",
+        "label": "双方同意重新商议",
+        "target": "diplomacy",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "jin-reply"
+            },
+            "同意重议"
+          ]
+        },
+        "value": "重新商议条款",
+        "basis": [
+          "jin-reaction"
+        ]
+      },
+      {
+        "id": "stall-talks",
+        "label": "两方议程不一致",
+        "target": "diplomacy",
+        "start": 5,
+        "until": 5,
+        "when": true,
+        "value": "谈判暂时僵持",
+        "basis": [
+          "jin-reaction"
+        ]
+      }
+    ],
+    "policies": [
+      {
+        "id": "yue-proposes",
+        "label": "决定是否提出调整条款",
+        "actor": "yue",
+        "target": "proposal",
+        "start": 2,
+        "until": 2,
+        "basis": [
+          "yue-position",
+          "preferences"
+        ],
+        "actions": [
+          {
+            "value": "提出改议",
+            "when": {
+              "ref": "mandate"
+            },
+            "utility": 2,
+            "basis": [
+              "preferences"
+            ]
+          },
+          {
+            "value": "未提出改议",
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "preferences"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "qin-agenda",
+        "label": "决定朝廷递交的议程",
+        "actor": "qin",
+        "target": "court-agenda",
+        "start": 3,
+        "until": 3,
+        "basis": [
+          "preferences"
+        ],
+        "actions": [
+          {
+            "value": "提交改议",
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "ref": "proposal"
+                    },
+                    "提出改议"
+                  ]
+                },
+                {
+                  "ref": "coordination"
+                }
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "preferences"
+            ]
+          },
+          {
+            "value": "维持原议程",
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "preferences"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "jin-responds",
+        "label": "选择是否接受重新商议",
+        "actor": "jin",
+        "target": "jin-reply",
+        "start": 4,
+        "until": 4,
+        "basis": [
+          "jin-reaction"
+        ],
+        "actions": [
+          {
+            "value": "同意重议",
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "ref": "court-agenda"
+                    },
+                    "提交改议"
+                  ]
+                },
+                {
+                  "ref": "openness"
+                }
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "jin-reaction"
+            ]
+          },
+          {
+            "value": "维持原条件",
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "jin-reaction"
+            ]
+          }
+        ]
+      }
+    ],
+    "metrics": [
+      {
+        "id": "direction",
+        "label": "当年对金议和方向",
+        "field": "diplomacy"
+      }
+    ],
+    "forecast": {
+      "decision": "trusted",
+      "metric": "direction",
+      "baselineCheck": {
+        "value": "按原方案议和",
+        "basis": [
+          "treaty"
+        ]
+      },
+      "factors": [
+        {
+          "kind": "internal",
+          "status": "modeled",
+          "explanation": "先看授权能否持续，再看朝廷是否能协调提出新议程。",
+          "basis": [
+            "intervention",
+            "preferences"
+          ],
+          "variables": [
+            "mandate",
+            "coordination",
+            "court-agenda"
+          ]
+        },
+        {
+          "kind": "external",
+          "status": "modeled",
+          "explanation": "金方接受重议的意愿由不同的情景表示。",
+          "basis": [
+            "jin-reaction"
+          ],
+          "variables": [
+            "openness",
+            "jin-reply"
+          ]
+        },
+        {
+          "kind": "strategy",
+          "status": "modeled",
+          "explanation": "各方按前一步可见的提议和授权行动。",
+          "basis": [
+            "preferences",
+            "jin-reaction"
+          ],
+          "variables": [
+            "proposal",
+            "court-agenda",
+            "jin-reply"
+          ]
+        },
+        {
+          "kind": "weather",
+          "status": "unresolved",
+          "explanation": "史书记有旱情，现有证据不足以计算其对议和的影响。",
+          "basis": [
+            "drought",
+            "weather-gap"
+          ],
+          "variables": []
+        }
+      ]
+    }
+  }
+}
