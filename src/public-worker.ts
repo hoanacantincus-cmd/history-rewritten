@@ -1,5 +1,8 @@
 import { load } from 'cheerio/slim';
-import { configureHttpProviders, ModelProviderError, normalizeText, userAgent } from './provider-core.ts';
+import { ModelProviderError, normalizeText, userAgent } from './provider-core.ts';
+import { personalProviders } from './personal-providers.ts';
+import { isPersonalModel, personalModels } from './personal-models.ts';
+import type { PersonalModel } from './personal-models.ts';
 import type { Page, Providers } from './provider-core.ts';
 import { research } from './research.ts';
 import { requestSchema } from './schema.ts';
@@ -140,18 +143,16 @@ export async function reserveRun(env: PublicEnvironment, request: Request, now =
 }
 
 const personalKeyErrors: Record<number, string> = {
-  401: 'DeepSeek 未接受此 API Key，请检查密钥是否正确或已被撤销。',
-  402: '你的 DeepSeek 账户余额不足，请检查余额后再试。',
-  403: '此 DeepSeek API Key 无权使用当前模型。',
-  429: '你的 DeepSeek 账户请求过于频繁，请稍后再试。',
+  401: '未接受此 API Key，请确认供应商和密钥。',
+  402: '账户余额不足，请检查余额。',
+  403: '拒绝了此请求，请检查密钥权限或账户设置。',
+  429: '账户请求达到上限，请稍后再试。',
 };
 
-export function publicFetch(provide: (key: string, model: string | undefined, signal: AbortSignal) => Providers =
-  (key, model, signal) => configureHttpProviders({
-  OPENAI_BASE_URL: 'https://api.deepseek.com',
-  OPENAI_API_KEY: key,
-  OPENAI_MODEL: model || 'deepseek-flash',
-}, (url) => readArchive(url, signal), signal)) {
+type Provide = (key: string, model: string | undefined, signal: AbortSignal, provider: PersonalModel) => Providers;
+
+export function publicFetch(provide: Provide = (key, model, signal, provider) =>
+  personalProviders(provider, key, model, (url) => readArchive(url, signal), signal)) {
   return async (request: Request, env: PublicEnvironment): Promise<Response> => {
     const route = new URL(request.url);
     const useOwnKey = route.pathname === '/api/research/personal';
@@ -179,9 +180,11 @@ export function publicFetch(provide: (key: string, model: string | undefined, si
     }
     if ((!useOwnKey && route.pathname !== '/api/research') || request.method !== 'POST') return send({ error: 'Not found' }, 404);
     if (origin !== siteOrigin) return send({ error: '请从历史改写公开页发起请求。' }, 403);
+    const provider = useOwnKey ? route.searchParams.get('provider') ?? 'deepseek' : 'deepseek';
+    if (!isPersonalModel(provider)) return send({ error: '请选择受支持的模型供应商。' }, 400);
     const authorization = request.headers.get('Authorization');
     const personalKey = authorization?.match(/^Bearer ([A-Za-z0-9._~+/-]{12,512}={0,2})$/i)?.[1];
-    if (useOwnKey && !personalKey) return send({ error: '请检查填写的 DeepSeek API Key。' }, 400);
+    if (useOwnKey && !personalKey) return send({ error: '请检查填写的 API Key。' }, 400);
     if (!useOwnKey && authorization !== null) return send({ error: '请使用个人密钥推演入口。' }, 400);
     if (!personalKey && !ready) return send({ error: '公共推演暂不可用。', canUseOwnKey: true }, 503);
     if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') ?? '')) {
@@ -234,12 +237,12 @@ export function publicFetch(provide: (key: string, model: string | undefined, si
     void (async () => {
       try {
         const key = personalKey ?? env.DEEPSEEK_API_KEY!;
-        const bundle = await research(question.data, provide(key, env.DEEPSEEK_MODEL, signal), undefined,
+        const bundle = await research(question.data, provide(key, env.DEEPSEEK_MODEL, signal, provider), undefined,
           (progress) => { void emit({ type: 'progress', progress }); });
         await emit({ type: 'result', bundle });
       } catch (error) {
         if (error instanceof ModelProviderError && error.needsAccountAction) {
-          await emit({ type: 'error', error: personalKey ? personalKeyErrors[error.status] : '公共推演的模型暂不可用。',
+          await emit({ type: 'error', error: personalKey ? personalModels[provider] + personalKeyErrors[error.status] : '公共推演的模型暂不可用。',
             canUseOwnKey: !personalKey });
         } else {
           await emit({ type: 'error', error: '暂时无法完成该问题的史料检索或建模，请稍后重试。' });

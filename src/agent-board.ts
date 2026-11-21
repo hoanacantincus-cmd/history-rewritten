@@ -1,4 +1,5 @@
-import { agentEdges } from './agent-graph.ts';
+import { agentEdges, observedAgentFlows } from './agent-graph.ts';
+import type { AgentEdge } from './agent-graph.ts';
 import type { Simulation } from './engine.ts';
 import type { Bundle, Scalar } from './schema.ts';
 
@@ -49,6 +50,8 @@ export function drawAgentBoard(
   const model = bundle.model!;
   const board = node('section', 'monitor actor-board');
   board.append(node('h3', undefined, '智能体推演'));
+  board.id = 'agent-replay';
+  board.tabIndex = -1;
   if (!model.actors.length) {
     board.append(node('p', 'model-note', '这个模型使用直接规则，未定义独立行动的参与方。'));
     return board;
@@ -77,11 +80,12 @@ export function drawAgentBoard(
   const info = node('aside', 'actor-info');
   info.setAttribute('aria-live', 'polite');
   columns.append(network, info);
-  board.append(columns, node('p', 'actor-caption', '箭头表示模型中一方的行动影响了另一方可读取的状态。点选人物可查看行动与依据。'));
+  board.append(columns, node('p', 'actor-caption', '亮色箭头表示本轮实际读取了另一方改变过的状态。细线表示模型中可能发生的联系。'));
 
   let active = model.actors[0].id;
   let round = 1;
-  const maxRound = 'horizon' in analysis ? analysis.horizon : model.horizon;
+  const maxRound = 'horizon' in analysis ? analysis.horizon ?? model.horizon : model.horizon;
+  let timer: number | undefined;
   const actorButtons = new Map<string, HTMLButtonElement>();
   for (const actor of model.actors) {
     const marker = node('button', 'actor-marker', actor.label);
@@ -100,18 +104,31 @@ export function drawAgentBoard(
   prev.type = next.type = 'button';
   const label = node('span', 'actor-round-label');
   label.setAttribute('aria-live', 'polite');
-  timeline.append(prev, label, next);
-  board.append(timeline);
+  const play = node('button', 'button secondary actor-play', '自动播放');
+  play.type = 'button';
+  play.setAttribute('aria-pressed', 'false');
+  const slider = node('input');
+  slider.type = 'range';
+  slider.min = '1';
+  slider.max = String(maxRound);
+  slider.setAttribute('aria-label', '推演步数');
+  const legend = node('p', 'actor-live-summary');
+  legend.setAttribute('aria-live', 'polite');
+  const turnLog = node('div', 'actor-turn-log');
+  timeline.append(play, prev, slider, next, label);
+  board.append(timeline, legend, turnLog);
 
   function trace() {
     return analysis.runs.find((run) => run.decision === decision.select.value && run.scenario === scenario.select.value)?.trace ?? [];
   }
 
-  function paint(turnActors: Set<string>) {
+  function paint(turnActors: Set<string>, flows: AgentEdge[]) {
     const context = canvas.getContext('2d');
     if (!context) return;
     context.clearRect(0, 0, width, height);
-    for (const { from, to } of edges) {
+    const activeEdges = new Set(flows.map(({ from, to }) => from + ':' + to));
+    const knownEdges = new Map([...edges, ...flows].map((edge) => [edge.from + ':' + edge.to, edge]));
+    for (const [key, { from, to }] of knownEdges) {
       const start = positions.get(from)!;
       const end = positions.get(to)!;
       const dx = end.x - start.x;
@@ -120,9 +137,10 @@ export function drawAgentBoard(
       const x = end.x - dx * gap;
       const y = end.y - dy * gap;
       const angle = Math.atan2(dy, dx);
-      const isSelected = active === from || active === to;
-      context.strokeStyle = isSelected ? '#933e2c' : '#ad9d85';
-      context.lineWidth = isSelected ? 4 : 2.5;
+      const fired = activeEdges.has(key);
+      context.strokeStyle = fired ? '#70e0bf' : '#536767';
+      context.lineWidth = fired ? 5.5 : 2.2;
+      context.setLineDash(fired ? [] : [7, 6]);
       context.beginPath();
       context.moveTo(start.x + dx * gap, start.y + dy * gap);
       context.lineTo(x, y);
@@ -139,10 +157,30 @@ export function drawAgentBoard(
 
   function render() {
     const events = trace().filter((event) => event.step === round);
-    paint(new Set(events.flatMap(({ actor }) => actor ? [actor] : [])));
+    const flows = observedAgentFlows(trace(), round);
+    paint(new Set(events.flatMap(({ actor }) => actor ? [actor] : [])), flows);
+    legend.textContent = flows.length ? flows.map(({from, to, fields: ids}) =>
+      names.get(from) + ' → ' + names.get(to) + ' · ' + ids.map((id) => fields.get(id)).join('、')).join('　') :
+      '本步未记录跨参与方的状态读取。';
+    turnLog.replaceChildren();
+    for (const event of events) {
+      const item = node(event.actor ? 'button' : 'div', 'turn-event');
+      const actor = event.actor;
+      if (actor) {
+        (item as HTMLButtonElement).type = 'button';
+        item.onclick = () => { active = actor; render(); };
+      }
+      item.append(node('span', undefined, names.get(actor ?? '') ?? '全局状态'),
+        node('strong', undefined, rules.get(event.rule) ?? event.rule),
+        node('span', undefined, display(event.before) + ' → ' + display(event.after)));
+      turnLog.append(item);
+    }
+    if (!events.length) turnLog.append(node('p', 'model-note', '模型在此步没有记录状态变化。'));
     prev.disabled = round === 1;
     next.disabled = round === maxRound;
     label.textContent = '第 ' + round + ' / ' + maxRound + ' 步';
+    slider.value = String(round);
+    slider.setAttribute('aria-valuetext', label.textContent);
     info.replaceChildren(node('h4', undefined, names.get(active)));
     const actions = events.filter(({ actor }) => actor === active);
     if (!actions.length) info.append(node('p', 'model-note', '本步没有此方的行动记录。'));
@@ -182,9 +220,28 @@ export function drawAgentBoard(
     active = trace().find((event) => event.step === round && event.actor)?.actor ?? active;
     render();
   }
-  prev.onclick = () => jump(round - 1);
-  next.onclick = () => jump(round + 1);
-  scenario.select.onchange = decision.select.onchange = () => jump(1);
+  function pause() {
+    if (timer !== undefined) window.clearInterval(timer);
+    timer = undefined;
+    play.textContent = '自动播放';
+    play.setAttribute('aria-pressed', 'false');
+  }
+  prev.onclick = () => { pause(); jump(round - 1); };
+  next.onclick = () => { pause(); jump(round + 1); };
+  slider.oninput = () => { pause(); jump(slider.valueAsNumber); };
+  play.disabled = maxRound < 2;
+  play.onclick = () => {
+    if (timer !== undefined) { pause(); return; }
+    if (round === maxRound) jump(1);
+    play.textContent = '暂停';
+    play.setAttribute('aria-pressed', 'true');
+    timer = window.setInterval(() => {
+      if (!board.isConnected || round >= maxRound) { pause(); return; }
+      jump(round + 1);
+      if (round >= maxRound) pause();
+    }, 950);
+  };
+  scenario.select.onchange = decision.select.onchange = () => { pause(); jump(1); };
   jump(1);
   return board;
 }

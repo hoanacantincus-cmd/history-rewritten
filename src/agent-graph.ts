@@ -1,8 +1,9 @@
 import type { Expr, Model } from './schema.ts';
+import type { Simulation } from './engine.ts';
 
 export type AgentEdge = { from: string; to: string; fields: string[] };
 
-function reads(expression: Expr, fields: Set<string>) {
+export function reads(expression: Expr, fields: Set<string>) {
   if (expression === null || typeof expression !== 'object') return;
   if ('ref' in expression) fields.add(expression.ref);
   else for (const input of expression.args) reads(input, fields);
@@ -43,4 +44,28 @@ export function agentEdges(model: Model): AgentEdge[] {
     }
   }
   return [...edges.values()].map(({ edge, fields }) => ({ ...edge, fields: [...fields] }));
+}
+
+type Event = Simulation['runs'][number]['trace'][number];
+
+export function observedAgentFlows(trace: Event[], round: number): AgentEdge[] {
+  const lastWriter = new Map<string, Event>();
+  const flows = new Map<string, AgentEdge>();
+  for (const event of trace) {
+    if (event.step > round) break;
+    if (event.step < round) {
+      if (event.before !== event.after) lastWriter.set(event.field, event);
+      continue;
+    }
+    if (!event.actor) continue;
+    for (const field of event.reads ?? []) {
+      const from = lastWriter.get(field)?.actor;
+      if (!from || from === event.actor) continue;
+      const key = from + ':' + event.actor;
+      const edge = flows.get(key) ?? { from, to: event.actor, fields: [] };
+      if (!edge.fields.includes(field)) edge.fields.push(field);
+      flows.set(key, edge);
+    }
+  }
+  return [...flows.values()];
 }

@@ -9,6 +9,8 @@ import type { Providers } from '../src/providers.ts';
 import { simulate } from '../src/engine.ts';
 import { createApp } from '../src/server.ts';
 import { configureHttpProviders, ModelProviderError } from '../src/provider-core.ts';
+import { detectKeyProvider } from '../src/personal-models.ts';
+import { personalProviders } from '../src/personal-providers.ts';
 import { publicFetch, reserveRun } from '../src/public-worker.ts';
 import type { PublicEnvironment } from '../src/public-worker.ts';
 
@@ -180,7 +182,8 @@ test('HTTP streams the current research phase before modeling finishes and ends 
       all += chunk.value;
     }
     const events = all.trim().split('\n').map((line) => JSON.parse(line));
-    assert.equal(events.at(-2).progress.phase, 'check');
+    assert.equal(events.at(-2).progress.phase, 'simulate');
+    assert.equal(events.at(-2).progress.simulation.runs, 2);
     assert.equal(events.at(-1).type, 'result');
     assert.equal(simulate(events.at(-1).bundle).status, 'ready');
   } finally {
@@ -240,7 +243,7 @@ test('public endpoint accepts a custom question from Pages and streams validated
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), publishedOrigin);
   const records = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
-  assert.deepEqual(records.filter((row) => row.type === 'progress').map((row) => row.progress.phase), ['identify', 'evidence', 'model', 'check']);
+  assert.deepEqual(records.filter((row) => row.type === 'progress').map((row) => row.progress.phase), ['identify', 'evidence', 'model', 'check', 'simulate']);
   assert.equal(records.at(-1).type, 'result');
   assert.equal(records.at(-1).bundle.status, 'ready');
   const capped = await fetch(publicRequest('198.51.100.1'), env);
@@ -342,7 +345,7 @@ test('a rejected personal key surfaces the provider error and never uses the pub
     body: JSON.stringify({ question: '如果独立公投延后会怎样？' }),
   }), {});
   const text = await response.text();
-  assert.match(text, /你的 DeepSeek 账户余额不足/);
+  assert.match(text, /DeepSeek账户余额不足/);
   assert.ok(!text.includes(requestedKey) && !text.includes('"type":"result"'));
   assert.equal(completions, 2);
 });
@@ -361,4 +364,49 @@ test('DeepSeek provider rejects redirects without forwarding the bearer token', 
   await assert.rejects(driver.complete('Return JSON', '{}'), ModelProviderError);
   await assert.rejects(driver.complete('Return JSON', '{}', {}), ModelProviderError);
   assert.deepEqual(seen, ['https://api.deepseek.com/chat/completions', 'https://api.deepseek.com/responses']);
+});
+
+test('personal provider recognition never guesses among overlapping keys', () => {
+  assert.equal(detectKeyProvider('sk-ant-fixture'), 'anthropic');
+  assert.equal(detectKeyProvider('sk-proj-fixture'), 'openai');
+  assert.equal(detectKeyProvider('AIzaFixtureKey'), 'gemini');
+  assert.equal(detectKeyProvider('AQ.fixture'), 'gemini');
+  assert.equal(detectKeyProvider('xai-fixture'), 'grok');
+  assert.equal(detectKeyProvider('sk-or-v1-fixture'), 'openrouter');
+  assert.equal(detectKeyProvider('sk-1234567890abcdef1234567890abcdef'), undefined);
+});
+
+test('personal providers send their keys only to the selected provider using its native credentials', async (t) => {
+  const key = 'sk-fixture-credential-001';
+  const fixtures = [
+    ['openai', 'api.openai.com', 'Authorization'],
+    ['anthropic', 'api.anthropic.com', 'x-api-key'],
+    ['gemini', 'generativelanguage.googleapis.com', 'x-goog-api-key'],
+    ['deepseek', 'api.deepseek.com', 'Authorization'],
+    ['qwen', 'dashscope.aliyuncs.com', 'Authorization'],
+    ['qwen-intl', 'dashscope-intl.aliyuncs.com', 'Authorization'],
+    ['kimi', 'api.moonshot.cn', 'Authorization'],
+    ['kimi-intl', 'api.moonshot.ai', 'Authorization'],
+    ['grok', 'api.x.ai', 'Authorization'],
+    ['openrouter', 'openrouter.ai', 'Authorization'],
+  ] as const;
+  let index = 0;
+  t.mock.method(globalThis, 'fetch', async (url: URL | string, init: RequestInit) => {
+    const [driver, domain, name] = fixtures[index++];
+    const endpoint = new URL(url);
+    assert.equal(endpoint.hostname, domain);
+    assert.equal(endpoint.search, '');
+    assert.equal(new Headers(init.headers).get(name), name === 'Authorization' ? 'Bearer ' + key : key);
+    assert.equal(init.redirect, 'manual');
+    assert.ok(!String(init.body).includes(key));
+    const json = '{"ok":true}';
+    if (driver === 'anthropic') return Response.json({ content: [{ type: 'text', text: json }] });
+    if (driver === 'gemini') return Response.json({ candidates: [{ content: { parts: [{ thought: true, text: 'private' }, { text: json }] } }] });
+    return Response.json({ choices: [{ message: { content: json } }] });
+  });
+  for (const [provider] of fixtures) {
+    const providers = personalProviders(provider, key, undefined, async () => { throw new Error('Unexpected archive read'); }, new AbortController().signal);
+    assert.deepEqual(await providers.complete('Return JSON', '{}'), { ok: true });
+  }
+  assert.equal(index, fixtures.length);
 });

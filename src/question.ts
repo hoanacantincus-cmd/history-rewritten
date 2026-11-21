@@ -16,3 +16,10 @@ export function assembleQuestion(change: string, outcome: string) {
   const focus = outcome.trim().replace(/[？?。]+$/u, '').trim() || parts.outcome || defaultOutcome;
   return '如果' + parts.change + '，' + focus + '？';
 }
+
+export function normalizeQuestion(value: string) {
+  const text = value.trim();
+  if (!text) return '';
+  if (/[？?]$/u.test(text) || !/^如果/u.test(text)) return text;
+  return assembleQuestion(text, '');
+}

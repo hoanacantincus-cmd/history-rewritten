@@ -23,29 +23,26 @@
         <div class="hero-copy">
           <p class="eyebrow"><span></span>开源历史反事实实验室</p>
           <h1 id="hero-title">如果历史<br><em>换一种走法？</em></h1>
-          <p class="intro">填完一句话，查看各方怎么行动，以及哪些条件会让历史分岔。</p>
+          <p class="intro">写一句关于历史的「如果」。从史料检索到各方行动和可能走向，系统自动完成。</p>
           <form id="research-form">
             <div class="question-input">
-              <div class="question-clause">
-                <label class="if-prefix" for="question">如果</label>
-                <input id="question" name="change" aria-label="如果，要改变的条件" required maxlength="790" placeholder="岳飞得到了皇帝的全部信任" />
-              </div>
-              <div class="question-clause">
-                <span class="question-punctuation" aria-hidden="true">，</span>
-                <input id="consequence" name="outcome" aria-label="想观察的历史结果" maxlength="400" placeholder="南宋将会如何" />
-                <span class="question-punctuation" aria-hidden="true">？</span>
-              </div>
+              <label for="question">你的历史问题</label>
+              <textarea id="question" name="question" required maxlength="1200" rows="3"
+                placeholder="如果岳飞得到了皇帝的全部信任，南宋将会如何？"></textarea>
             </div>
             <details id="personal-key-panel" class="personal-key" hidden>
-              <summary>使用自己的 DeepSeek API Key</summary>
-              <label for="personal-key">DeepSeek API Key</label>
+              <summary>使用自己的模型 API Key</summary>
+              <label for="personal-key">API Key</label>
               <input id="personal-key" type="password" autocomplete="off" spellcheck="false" maxlength="514"
-                aria-describedby="personal-key-note" placeholder="粘贴 DeepSeek API Key" />
-              <p id="personal-key-note">使用你的 DeepSeek 账户计费，不占公共额度。密钥仅用于本页请求，收起或离开页面即清除。<a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">获取 API Key ↗</a></p>
+                aria-describedby="personal-key-note" placeholder="粘贴模型 API Key" />
+              <label id="personal-provider-label" for="personal-provider" hidden>密钥供应商
+                <select id="personal-provider"><option value="">请选择</option></select>
+              </label>
+              <p id="personal-key-note" aria-live="polite">支持 OpenAI、Claude、Gemini、DeepSeek、通义千问、Kimi、Grok 和 OpenRouter。调用走你的账户，密钥仅用于本页。</p>
             </details>
             <div class="action-row">
               <button class="button primary" type="submit" id="research-button">预览推演 <span aria-hidden="true">→</span></button>
-              <button class="button secondary" type="button" id="sample-question">填入岳飞示例</button>
+              <button class="button secondary" type="button" id="sample-question">观看岳飞推演示例</button>
               <label class="button secondary import-button">导入分析包<input type="file" id="import" accept=".json,application/json" /></label>
             </div>
           </form>

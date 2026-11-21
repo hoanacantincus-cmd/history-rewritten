@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { simulate } from './engine.ts';
 import { draftJsonSchema, draftSchema, ForecastEvidenceError, parseBundle, requestSchema } from './schema.ts';
 import type { Bundle, Draft, ResearchRequest, Source } from './schema.ts';
 import { ModelProviderError, normalizeText } from './provider-core.ts';
@@ -144,7 +145,7 @@ export async function research(
   report?.({ phase: 'identify', detail: '正在识别要改变的决定，以及你想观察的结果。' });
   const plan = planSchema.parse(await providers.complete(planningPrompt, JSON.stringify({ question: query.question })));
   const terms = [...new Set([...(plan.topics?.slice(0, 2) ?? []), ...plan.queries])].slice(0, 6);
-  report?.({ phase: 'evidence', detail: '正在查找并读取相关史料。' });
+  report?.({ phase: 'evidence', detail: '正在查找并读取相关史料。', terms });
   const searches = await Promise.allSettled(terms.map((term) => providers.search(term)));
   const results = searches.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
   const { records, unavailable } = await getEvidence(query.sources, results, providers, accessed);
@@ -167,6 +168,19 @@ export async function research(
   const instructions = modelPrompt + '\nSCHEMA\n' + JSON.stringify(schema);
   const textById = new Map(records.map((item) => [item.source.id, item.text]));
   const compactModel = '\nIf possible, repair the last validation issue with a smaller model: one measured outcome, 3–6 fields, two decisions, one or two scenarios and 2–5 short rules. Include relevant actors and mark unresolved factors explicitly. Prefer boolean or categorical state and simple when conditions. Do not reuse a rule that violates the schema.';
+  function validated(draft: Draft) {
+    const bundle = parseBundle({ ...draft, ...common });
+    if (report && bundle.model) {
+      const run = simulate(bundle);
+      const { actors, decisions, scenarios, horizon } = bundle.model;
+      report({
+        phase: 'simulate', detail: '已复算 ' + run.runs.length + ' 条轨迹，保留每一步的行动与状态变化。',
+        simulation: { actors: actors.map(({ label }) => label), branches: decisions.map(({ label }) => label),
+          scenarios: scenarios.length, rounds: horizon, runs: run.runs.length },
+      });
+    }
+    return bundle;
+  }
   let repair = '';
   let grounded: Draft | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -283,12 +297,12 @@ export async function research(
       if (unavailable && draft.gaps.length < 16) draft.gaps.push('部分来源正文未能读取，可用原文摘录补充。');
       if (!results.length && query.sources.length && draft.gaps.length < 16) draft.gaps.push('本次依赖用户提供的史料，自动检索未能完成。');
       report?.({ phase: 'check', detail: '正在核对引文、各方能获得的信息，以及规则能否运行。' });
-      try { return parseBundle({ ...draft, ...common }); }
+      try { return validated(draft); }
       catch (error) {
         if (!(error instanceof ForecastEvidenceError) || !draft.model?.forecast?.weights) throw error;
         delete draft.model.forecast.weights;
         if (draft.gaps.length < 16) draft.gaps.push('本次情景的权重缺少可复核的计数，结果按条件展示。');
-        return parseBundle({ ...draft, ...common });
+        return validated(draft);
       }
     } catch (error) {
       if (error instanceof ModelProviderError && error.needsAccountAction) throw error;

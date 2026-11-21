@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { simulate } from '../src/engine.ts';
 import { parseBundle } from '../src/schema.ts';
-import { agentEdges } from '../src/agent-graph.ts';
-import { assembleQuestion, questionParts } from '../src/question.ts';
+import { agentEdges, observedAgentFlows } from '../src/agent-graph.ts';
+import { assembleQuestion, normalizeQuestion, questionParts } from '../src/question.ts';
 
 function demo(name: string) {
   return parseBundle(JSON.parse(readFileSync(new URL('../public/examples/' + name + '.json', import.meta.url), 'utf8')));
@@ -127,11 +127,13 @@ test('two agents respond in order to observed actions and weather-dependent cost
   assert.equal(simulate(data, { scenario: 'draw-support' }).runs[1].metrics.outcome, null);
 });
 
-test('the sentence accepts two blanks, a pasted question, and a default outcome', () => {
+test('the sentence accepts a pasted question and applies the default outcome to a fragment', () => {
   const question = '如果岳飞得到了皇帝的全部信任，南宋将会如何？';
   assert.equal(assembleQuestion('岳飞得到了皇帝的全部信任', '南宋将会如何'), question);
   assert.deepEqual(questionParts(question), { change: '岳飞得到了皇帝的全部信任', outcome: '南宋将会如何' });
-  assert.equal(assembleQuestion(question, ''), question);
+  assert.equal(normalizeQuestion(question), question);
+  assert.equal(normalizeQuestion('如果南迁提议获准'), '如果南迁提议获准，历史将会如何发展？');
+  assert.equal(normalizeQuestion('南宋如果提前开放海贸会怎样？'), '南宋如果提前开放海贸会怎样？');
   assert.equal(assembleQuestion('南迁提议获准', ''), '如果南迁提议获准，历史将会如何发展？');
   assert.equal(assembleQuestion('如果', ''), '');
 });
@@ -150,6 +152,10 @@ test('the featured example derives visible actor links and three distinct diplom
     '重新商议条款', '谈判暂时僵持', '按原方案议和',
   ]);
   assert.equal(output.forecast?.observations, null);
+  const trace = output.runs.find(({ decision }) => decision === 'trusted')!.trace;
+  assert.deepEqual(observedAgentFlows(trace, 1), []);
+  assert.deepEqual(observedAgentFlows(trace, 2), [{ from: 'emperor', to: 'yue', fields: ['mandate'] }]);
+  assert.deepEqual(observedAgentFlows(trace, 3), [{ from: 'yue', to: 'qin', fields: ['proposal'] }]);
   model.variables.find(({ id }) => id === 'mandate')!.visibility!.yue = 3;
   assert.equal(agentEdges(model).some(({ from }) => from === 'emperor'), false);
 });

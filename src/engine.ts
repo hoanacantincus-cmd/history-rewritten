@@ -34,6 +34,7 @@ type Trace = {
   basis: string[];
   indeterminate: boolean;
   utilities?: { action: string | boolean; value: number | null }[];
+  reads?: string[];
 };
 type Run = {
   scenario: string;
@@ -128,23 +129,27 @@ function run(
   for (let step = 1; step <= horizon; step++) {
     const next = { ...state };
     const updated = new Set<string>();
-    const readFor = (actor?: string) => (name: string): Scalar => {
+    const readFor = (fieldsRead: Set<string>, actor?: string) => (name: string): Scalar => {
       const visibility = fields.get(name)!.visibility;
       if (actor && visibility && step < (Object.hasOwn(visibility, actor) ? visibility[actor] : Infinity)) return null;
+      if (actor && state[name] !== null) fieldsRead.add(name);
       return state[name];
     };
     for (const policy of model.policies ?? []) {
       if (step < policy.start || step > policy.until) continue;
-      const choice = chooseAction(policy, readFor(policy.actor));
+      const fieldsRead = new Set<string>();
+      const choice = chooseAction(policy, readFor(fieldsRead, policy.actor));
       next[policy.target] = choice.value;
       trace.push({
         step, rule: policy.id, actor: policy.actor, field: policy.target, before: state[policy.target],
         after: choice.value, basis: choice.evidence, utilities: choice.utilities, indeterminate: choice.value === null,
+        ...(fieldsRead.size ? { reads: [...fieldsRead] } : {}),
       });
     }
     for (const rule of model.rules) {
       if (step < rule.start || step > rule.until || updated.has(rule.target)) continue;
-      const read = readFor(rule.actor);
+      const fieldsRead = new Set<string>();
+      const read = readFor(fieldsRead, rule.actor);
       const enabled = evaluate(rule.when, read);
       if (enabled === false) continue;
       // An unknown higher-priority condition can change the outcome, so it blocks fallthrough.
@@ -155,7 +160,8 @@ function run(
       const before = state[rule.target];
       next[rule.target] = after;
       if (before !== after || (after === null && !reportedUnknown.has(rule.id))) {
-        trace.push({ step, rule: rule.id, field: rule.target, actor: rule.actor, before, after, basis: rule.basis, indeterminate: after === null });
+        trace.push({ step, rule: rule.id, field: rule.target, actor: rule.actor, before, after, basis: rule.basis,
+          indeterminate: after === null, ...(fieldsRead.size ? { reads: [...fieldsRead] } : {}) });
       }
       if (after === null) reportedUnknown.add(rule.id);
     }
