@@ -38,6 +38,9 @@ function show(value: Scalar, unit?: string) {
   if (typeof value === 'string') return value;
   return number.format(value) + (unit && unit !== '1' ? ' ' + unit : '');
 }
+const percent = new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 });
+const factorNames = { internal: '内部条件', external: '外部局势', strategy: '各方博弈', weather: '天气' };
+const factorStatus = { modeled: '已建模', unresolved: '资料不足', irrelevant: '影响有限' };
 
 function setBundle(data: unknown, demo?: string) {
   const bundle = parseBundle(data);
@@ -211,9 +214,12 @@ function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.
           }
           const list = el('ol', 'event-list');
           for (const event of run.trace) {
-            const rule = model.rules.find((item) => item.id === event.rule)!;
-            const item = el('li', undefined, '第 ' + event.step + ' 步 · ' + rule.label + ' · ' +
+            const rule = model.rules.find((item) => item.id === event.rule) ?? model.policies?.find((item) => item.id === event.rule);
+            const item = el('li', undefined, '第 ' + event.step + ' 步 · ' + (rule?.label ?? event.rule) + ' · ' +
               show(event.before, unit(event.field)) + ' → ' + show(event.after, unit(event.field)));
+            if (event.utilities?.length) {
+              item.append('（' + event.utilities.map(({ action, value }) => show(action) + ' ' + show(value)).join(' / ') + '）');
+            }
             item.append(references(bundle, event.basis));
             list.append(item);
           }
@@ -264,6 +270,10 @@ function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.
       });
       selected.basis = [...selected.basis.slice(-9), id];
       for (const { variable, read } of changed) selected.parameters[variable.id] = read();
+      if (updated.model?.forecast?.weights) {
+        delete updated.model.forecast.weights;
+        if (updated.gaps.length < 16) updated.gaps.push('手动修改情景条件后，原计数权重不再适用。');
+      }
       try {
         render(parseBundle(updated), current.id, horizon.valueAsNumber);
         say('已按修改后的假设复算。');
@@ -280,6 +290,48 @@ function drawModel(bundle: Bundle, scenarioValue = 'all', horizonValue = bundle.
   horizon.addEventListener('change', refresh);
   drawEditor();
   refresh();
+  return section;
+}
+
+function drawForecast(bundle: Bundle, horizon?: number) {
+  const model = bundle.model!;
+  const spec = model.forecast!;
+  const forecast = simulate(bundle, { horizon }).forecast!;
+  const section = el('section', 'monitor');
+  section.append(el('h3', undefined, forecast.observations ? '可能走向与模型概率' : '可能走向'));
+  const grid = el('div', 'forecast-grid');
+  const names = new Map(model.scenarios.map(({ id, label }) => [id, label]));
+  const outcomes = [...forecast.outcomes].sort((a, b) => (b.probability?.lower ?? 0) - (a.probability?.lower ?? 0));
+  for (const outcome of outcomes) {
+    const card = el('article', 'outcome');
+    if (outcome.probability) {
+      const { lower, upper } = outcome.probability;
+      card.append(el('strong', undefined, percent.format(lower) + (lower === upper ? '' : '–' + percent.format(upper))));
+    }
+    card.append(el('h4', undefined, outcome.label));
+    const labels = outcome.scenarios.map((scenario) => names.get(scenario));
+    card.append(el('p', 'model-note', labels.length ? labels.join('、') : '现有情景未出现此走向'));
+    grid.append(card);
+  }
+  section.append(grid);
+  if (forecast.observations && spec.weights) {
+    const math = el('p', 'model-note', '按 ' + number.format(forecast.observations) + ' 个有记录的样本或等可能项加权。' + spec.weights.method);
+    math.append(references(bundle, spec.weights.counts.flatMap(({ basis }) => basis)));
+    section.append(math);
+    if (forecast.unknownMass) section.append(el('p', 'model-note', '有 ' + percent.format(forecast.unknownMass) + ' 的权重对应未判定情景，因此显示概率上下界。'));
+  } else {
+    section.append(el('p', 'model-note', '目前只有条件情景，资料不足以估计各走向的概率。'));
+  }
+  const audit = el('details');
+  audit.append(el('summary', undefined, '查看各方博弈、内外条件与天气依据'));
+  const list = el('ul', 'event-list');
+  for (const factor of spec.factors) {
+    const item = el('li', undefined, factorNames[factor.kind] + ' · ' + factorStatus[factor.status] + '。' + factor.explanation);
+    item.append(references(bundle, factor.basis));
+    list.append(item);
+  }
+  audit.append(list);
+  section.append(audit);
   return section;
 }
 
@@ -301,7 +353,8 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
   };
   header.append(heading, button);
   results.replaceChildren(header, el('p', 'result-scope', bundle.scope));
-  if (bundle.model) results.append(drawModel(bundle, scenario, horizon));
+  if (bundle.model?.forecast) results.append(drawForecast(bundle, horizon));
+  else if (!bundle.model && bundle.status === 'insufficient') results.append(el('p', 'model-note', '目前史料不足以估计历史走向的概率。'));
   if (bundle.status === 'clarification') {
     const section = el('section', 'monitor');
     section.append(el('h3', undefined, '选择要分析的问题'));
@@ -311,7 +364,7 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
       use.type = 'button';
       use.onclick = () => {
         if (form.hidden) { say(option.question); return; }
-        question.value = option.question;
+        question.value = option.question.replace(/^如果\s*/u, '');
         form.requestSubmit();
       };
       line.append(use, references(bundle, option.basis));
@@ -335,7 +388,12 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
   bundle.gaps.forEach((gap) => list.append(el('li', undefined, gap)));
   gaps.append(bundle.gaps.length ? list : el('p', 'model-note', '查看模型假设，了解本次推演的适用范围。'));
   record.append(timeline, gaps);
-  results.append(record, viewSources(bundle));
+  if (bundle.model) {
+    const details = el('details', 'monitor analysis-details');
+    details.open = Boolean(scenario) || !bundle.model.forecast;
+    details.append(el('summary', undefined, '模型、史料与复算'), drawModel(bundle, scenario, horizon), record, viewSources(bundle));
+    results.append(details);
+  } else results.append(record, viewSources(bundle));
 }
 
 document.querySelectorAll<HTMLButtonElement>('[data-case]').forEach((card) => {
@@ -367,17 +425,15 @@ byId<HTMLButtonElement>('local-import').onclick = () => input.click();
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (researchButton.disabled) return;
+  const condition = question.value.trim().replace(/^如果\s*/u, '');
+  if (!condition) { say('请在「如果」后面写下你想改写的历史。'); return; }
   const operationId = ++operation;
   researchButton.disabled = true;
   say('正在查找史料并构建分析，通常需要一点时间。');
   try {
-    const sources = byId<HTMLTextAreaElement>('sources').value.split(/\r?\n/).filter((line) => line.trim()).map((line) => {
-      const [url, ...parts] = line.split(' | ');
-      return { url: url.trim(), ...(parts.length ? { excerpt: parts.join(' | ').trim() } : {}) };
-    });
     const response = await fetch('/api/research', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question.value, sources }),
+      body: JSON.stringify({ question: '如果' + condition }),
     });
     const data: unknown = await response.json();
     if (!response.ok) throw new Error((data as { error?: string }).error ?? '分析服务暂时不可用。');

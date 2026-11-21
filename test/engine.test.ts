@@ -60,3 +60,53 @@ test('parameters obey declared bounds and invalid arithmetic cannot become a his
   data.model!.rules[0].value = { op: 'div', args: [{ ref: 'total' }, { ref: 'share' }] };
   assert.equal(simulate(data, { scenario: 'share-40' }).runs[1].metrics.due, null);
 });
+
+test('forecast probabilities use source counts and keep unclassified mass visible', () => {
+  const data = demo('lottery-1788');
+  const forecast = simulate(data).forecast!;
+  assert.equal(forecast.observations, 104);
+  assert.deepEqual(forecast.outcomes.map(({ probability }) => probability?.lower), [57 / 104, 47 / 104]);
+  assert.equal(simulate(data, { scenario: 'draw-support' }).forecast?.observations, null);
+  data.model!.rules[2].value = null;
+  const partial = simulate(data).forecast!;
+  assert.equal(partial.unknownMass, 47 / 104);
+  assert.deepEqual(partial.outcomes[0].probability, { lower: 57 / 104, upper: 1 });
+  data.model!.forecast!.weights!.counts[0].count = 58;
+  assert.throws(() => simulate(data), /matching cited observation/);
+});
+
+test('two agents respond in order to observed actions and weather-dependent costs', () => {
+  const data = demo('lottery-1788');
+  const model = data.model!;
+  const basis = ['population'];
+  model.horizon = 3;
+  delete model.forecast!.weights;
+  model.actors.push({ id: 'partner', label: 'Negotiation partner' });
+  model.variables.push(
+    { id: 'weather-cost', label: 'Weather-dependent travel cost', kind: 'number', unit: '1', role: 'parameter', initial: null, basis },
+    { id: 'offer', label: 'Offer', kind: 'boolean', role: 'state', initial: false, basis, visibility: { partner: 2 } },
+    { id: 'accept', label: 'Acceptance', kind: 'boolean', role: 'state', initial: false, basis },
+  );
+  const reference = (ref: string) => ({ ref });
+  model.scenarios[0].parameters['weather-cost'] = 1;
+  model.scenarios[1].parameters['weather-cost'] = 4;
+  model.policies = [
+    { id: 'make-offer', label: 'Consider a proposal', actor: 'convention', target: 'offer', start: 1, until: 1, basis,
+      actions: [{ value: true, when: reference('drawing'), utility: { op: 'sub', args: [3, reference('weather-cost')] }, basis },
+        { value: false, when: true, utility: 0, basis }] },
+    { id: 'take-offer', label: 'Respond to the proposal', actor: 'partner', target: 'accept', start: 2, until: 2, basis,
+      actions: [{ value: true, when: reference('offer'), utility: 1, basis }, { value: false, when: true, utility: 0, basis }] },
+  ];
+  // The synthetic case classifies the partner's response at step three.
+  model.rules = [
+    { ...model.rules[0], start: 3, until: 3, value: '当天未达到九州门槛' },
+    { ...model.rules[1], start: 3, until: 3, when: reference('accept') },
+    { ...model.rules[2], start: 3, until: 3, when: { op: 'not', args: [reference('accept')] } },
+  ];
+  const mild = simulate(data, { scenario: 'draw-support' });
+  assert.equal(mild.runs[1].metrics.outcome, '当天达到九州门槛');
+  assert.deepEqual(mild.runs[1].trace[0].utilities, [{ action: true, value: 2 }, { action: false, value: 0 }]);
+  assert.equal(simulate(data, { scenario: 'draw-oppose' }).runs[1].metrics.outcome, '当天未达到九州门槛');
+  model.variables.find(({ id }) => id === 'offer')!.visibility!.partner = 3;
+  assert.equal(simulate(data, { scenario: 'draw-support' }).runs[1].metrics.outcome, null);
+});

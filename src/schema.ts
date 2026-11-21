@@ -47,6 +47,26 @@ const variableSchema = z.strictObject({
   initial: scalar, basis,
   visibility: z.record(id, step).optional(),
 });
+const policySchema = z.strictObject({
+  id, label, actor: id, target: id, start: step, until: step, basis,
+  actions: z.array(z.strictObject({
+    value: z.union([label.max(100), z.boolean()]), when: expression(3), utility: expression(3), basis,
+  })).min(2).max(8),
+});
+const factorKinds = ['internal', 'external', 'strategy', 'weather'] as const;
+const forecastSchema = z.strictObject({
+  decision: id, metric: id,
+  factors: z.array(z.strictObject({
+    kind: z.enum(factorKinds), status: z.enum(['modeled', 'unresolved', 'irrelevant']),
+    explanation: prose, basis, variables: z.array(id).max(12),
+  })).length(factorKinds.length),
+  weights: z.strictObject({
+    method: prose,
+    counts: z.array(z.strictObject({
+      scenario: id, count: z.number().int().min(0).max(1_000_000_000), basis,
+    })).min(2).max(16),
+  }).optional(),
+});
 const modelSchema = z.strictObject({
   horizon: step.refine((n) => n > 0),
   stepLabel: label,
@@ -63,6 +83,8 @@ const modelSchema = z.strictObject({
     when: expression(3), value: expression(3), basis,
   })).min(1).max(64),
   metrics: z.array(z.strictObject({ id, label, field: id })).min(1).max(8),
+  policies: z.array(policySchema).max(12).optional(),
+  forecast: forecastSchema.optional(),
 });
 const timelineItem = z.strictObject({ label, when: label, basis });
 export const draftSchema = z.strictObject({
@@ -75,8 +97,8 @@ export const draftSchema = z.strictObject({
   model: modelSchema.nullable(),
 });
 const bundleSchema = draftSchema.extend({
-  schemaVersion: z.literal(1),
-  engineVersion: z.literal('1'),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  engineVersion: z.enum(['1', '2']),
   question: prose,
   sources: z.array(sourceSchema).max(24),
 });
@@ -93,6 +115,7 @@ export type Draft = z.infer<typeof draftSchema>;
 export type Bundle = z.infer<typeof bundleSchema>;
 export type Model = NonNullable<Bundle['model']>;
 export type Variable = Model['variables'][number];
+export class ForecastEvidenceError extends Error {}
 
 function index<T extends { id: string }>(items: T[], name: string): Map<string, T> {
   const result = new Map<string, T>();
@@ -157,10 +180,10 @@ function typeOf(expr: Expr, fields: Map<string, Variable>, path: string): ValueT
 function validateModel(model: Model, checkBasis: (refs: string[], path: string, context?: boolean) => void) {
   const actors = index(model.actors, 'actors');
   const fields = index(model.variables, 'variables');
-  index(model.decisions, 'decisions');
-  index(model.scenarios, 'scenarios');
-  index(model.rules, 'rules');
-  index(model.metrics, 'metrics');
+  const branches = index(model.decisions, 'decisions');
+  const scenarios = index(model.scenarios, 'scenarios');
+  index([...model.rules, ...model.policies ?? []], 'rules and policies');
+  const metrics = index(model.metrics, 'metrics');
   if (model.scenarios.some(({ id }) => id === 'all') || model.metrics.some(({ id }) => id === 'all')) {
     throw new Error('"all" is reserved for selection');
   }
@@ -219,10 +242,68 @@ function validateModel(model: Model, checkBasis: (refs: string[], path: string, 
   for (const metric of model.metrics) {
     if (!fields.has(metric.field)) throw new Error('model.metrics.' + metric.id + ' refers to an unknown field');
   }
+  const policyTargets = new Set(model.rules.map((rule) => rule.target));
+  for (const policy of model.policies ?? []) {
+    const path = 'model.policies.' + policy.id;
+    const target = fields.get(policy.target);
+    if (!target || target.role !== 'state' || target.kind === 'number' || policyTargets.has(target.id)) {
+      throw new Error(path + ' needs a separate categorical or boolean state target');
+    }
+    policyTargets.add(target.id);
+    if (!actors.has(policy.actor)) throw new Error(path + ' refers to an unknown actor');
+    if (policy.start < 1 || policy.start > policy.until || policy.until > model.horizon) {
+      throw new Error(path + ' has invalid step bounds');
+    }
+    checkBasis(policy.basis, path, true);
+    const values = new Set<string | boolean>();
+    for (const action of policy.actions) {
+      if (values.has(action.value) || !valueFits(action.value, target)) throw new Error(path + ' has an invalid action value');
+      values.add(action.value);
+      const when = typeOf(action.when, fields, path + '.when');
+      if (when !== 'boolean' && when !== 'unknown') throw new Error(path + '.when must be boolean');
+      unitOf(action.when, fields, path + '.when');
+      const utility = typeOf(action.utility, fields, path + '.utility');
+      const unit = unitOf(action.utility, fields, path + '.utility');
+      if ((utility !== 'number' && utility !== 'unknown') || (unit && unit !== '1')) {
+        throw new Error(path + ' needs a dimensionless utility');
+      }
+      checkBasis(action.basis, path + '.actions', true);
+    }
+  }
+  const forecast = model.forecast;
+  if (forecast) {
+    const outcome = metrics.get(forecast.metric);
+    const field = outcome && fields.get(outcome.field);
+    if (!branches.has(forecast.decision) || forecast.decision === model.decisions[0].id || field?.kind !== 'category' || field.role !== 'state') {
+      throw new Error('Forecast needs a non-baseline decision and a categorical outcome state');
+    }
+    if (new Set(forecast.factors.map(({ kind }) => kind)).size !== factorKinds.length) {
+      throw new Error('Forecast factors must cover internal, external, strategy and weather once each');
+    }
+    for (const factor of forecast.factors) {
+      if (factor.variables.some((fieldId) => !fields.has(fieldId)) || (factor.status === 'modeled' && !factor.variables.length)) {
+        throw new Error('Forecast factor ' + factor.kind + ' must refer to its model fields');
+      }
+      checkBasis(factor.basis, 'model.forecast.factors.' + factor.kind, true);
+    }
+    if (forecast.weights) {
+      const ids = new Set(forecast.weights.counts.map(({ scenario }) => scenario));
+      if (ids.size !== scenarios.size || ids.size !== forecast.weights.counts.length ||
+          [...ids].some((scenario) => !scenarios.has(scenario)) ||
+          forecast.weights.counts.filter(({ count }) => count > 0).length < 2) {
+        throw new ForecastEvidenceError('Forecast weights must cover every scenario, with at least two nonzero counts');
+      }
+      for (const item of forecast.weights.counts) checkBasis(item.basis, 'model.forecast.weights.' + item.scenario, true);
+    }
+  }
 }
 
 export function parseBundle(input: unknown): Bundle {
   const bundle = bundleSchema.parse(input);
+  if (String(bundle.schemaVersion) !== bundle.engineVersion ||
+      (bundle.schemaVersion === 1 && (bundle.model?.forecast || bundle.model?.policies))) {
+    throw new Error('Analysis bundle uses incompatible schema and engine versions');
+  }
   const sources = index(bundle.sources, 'sources');
   const claims = index(bundle.claims, 'claims');
   for (const claim of claims.values()) {
@@ -255,6 +336,18 @@ export function parseBundle(input: unknown): Bundle {
     }
     if (!bundle.model.decisions[0].basis.some((ref) => claims.get(ref)?.status === 'supported')) {
       throw new Error('model.decisions[0] needs a sourced historical baseline');
+    }
+    for (const weight of bundle.model.forecast?.weights?.counts ?? []) {
+      const counts = weight.basis.flatMap((ref) => {
+        const claim = claims.get(ref);
+        if (claim?.status !== 'supported') return [];
+        return claim.citations.flatMap(({ quote }) =>
+          [...quote.matchAll(/[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*[%％]?/g)]
+            .map(([number]) => number.trim())
+            .filter((number) => /^\d[\d,]*$/.test(number))
+            .map((number) => Number(number.replaceAll(',', ''))));
+      });
+      if (!counts.includes(weight.count)) throw new ForecastEvidenceError('Forecast count requires a matching cited observation: ' + weight.scenario);
     }
   } else if (bundle.status === 'ready' || bundle.model) {
     throw new Error('Only ready bundles can contain a model, and ready bundles must contain one');

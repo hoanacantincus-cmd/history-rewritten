@@ -48,11 +48,12 @@ h1 em { color: var(--accent-dark); font-style: normal; }
 .atlas figcaption { padding: 12px 3px 1px; display: flex; align-items: center; gap: 8px; color: #5f5142; font-size: 11px; }
 .atlas figcaption i { width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); }
 .atlas figcaption a { margin-left: auto; text-decoration: underline; text-underline-offset: 3px; }
-.field-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 13px; font-weight: 700; }
 textarea, select, input[type=number] { padding: 10px 12px; border: 1px solid #d4c9b9; border-radius: 7px; background: var(--bright); font-size: 14px; }
 textarea { width: 100%; line-height: 1.6; resize: vertical; min-height: 66px; }
-.source-input { margin: 5px 0 12px; color: var(--muted); font-size: 13px; }
-.source-input label { display: block; margin: 8px 0; }
+.question-input { display: flex; align-items: start; gap: 8px; padding: 8px 9px 6px 14px; background: var(--bright); border: 1px solid #d4c9b9; border-radius: 9px; margin-bottom: 11px; }
+.question-input:focus-within { outline: 2px solid #75614a; outline-offset: 2px; }
+.question-input textarea { border: 0; outline: 0; min-width: 0; background: transparent; padding-left: 0; }
+.if-prefix { margin-top: 10px; font-weight: 800; color: var(--accent-dark); }
 summary { cursor: pointer; }
 .examples { border-top: 1px solid var(--rule); padding: 28px 0 38px; scroll-margin-top: 16px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 21px; }
@@ -72,6 +73,12 @@ summary { cursor: pointer; }
 .result-scope { color: var(--muted); line-height: 1.7; margin: 12px 0 17px; max-width: 62em; }
 .monitor { border: 1px solid var(--rule); background: var(--bright); border-radius: 10px; padding: clamp(13px, 3vw, 24px); margin-top: 14px; }
 .monitor h3 { font-size: 20px; margin-bottom: 13px; }
+.forecast-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 10px; margin-block: 12px; }
+.outcome { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); }
+.outcome h4 { margin: .4rem 0 0; font-size: 16px; line-height: 1.45; }
+.outcome strong { color: var(--accent-dark); font-size: clamp(22px, 4vw, 34px); font-variant-numeric: tabular-nums; }
+.outcome p { margin-top: 8px; }
+.analysis-details > summary { color: var(--accent-dark); font-weight: 750; }
 .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin-bottom: 14px; }
 .controls label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
 .controls input[type=number] { width: 7em; }

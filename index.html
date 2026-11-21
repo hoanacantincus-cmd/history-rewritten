@@ -23,20 +23,17 @@
         <div class="hero-copy">
           <p class="eyebrow"><span></span>开源历史反事实实验室</p>
           <h1 id="hero-title">如果历史<br><em>换一种走法？</em></h1>
-          <p class="intro">从一个历史问题出发，沿着史料追查关键决策，对照不同假设下的走向。</p>
+          <p class="intro">写一句你想改写的历史。查看不同走向、模型概率，以及结论背后的史料。</p>
           <div id="demo-entry" class="action-row">
             <a class="button primary" href="#examples">试一个案例 <span aria-hidden="true">↓</span></a>
             <label class="button secondary import-button">导入分析包<input type="file" id="import" accept=".json,application/json" /></label>
           </div>
           <form id="research-form" hidden>
-            <label class="field-label" for="question">你的历史问题</label>
-            <textarea id="question" name="question" required maxlength="1200" rows="3" placeholder="例如，如果一份条约晚一年签订，会改变哪些结果？"></textarea>
-            <details class="source-input">
-              <summary>补充史料</summary>
-              <label for="sources">每行填写一个链接，也可用「 | 」附上原文摘录</label>
-              <textarea id="sources" name="sources" rows="3" placeholder="https://… | 原文摘录（可选）"></textarea>
-            </details>
-            <div class="action-row"><button class="button primary" type="submit" id="research-button">检索并分析 <span aria-hidden="true">→</span></button><button type="button" class="button secondary" id="local-import">导入分析包</button></div>
+            <div class="question-input">
+              <label class="if-prefix" for="question">如果</label>
+              <textarea id="question" name="question" required maxlength="1197" rows="2" placeholder="1905 年日本在和谈中坚持要求赔款……"></textarea>
+            </div>
+            <div class="action-row"><button class="button primary" type="submit" id="research-button">开始推演 <span aria-hidden="true">→</span></button><button type="button" class="button secondary" id="local-import">导入分析包</button></div>
           </form>
           <p class="hero-note" id="mode-note">公开演示可离线复算。<a href="https://github.com/hoanacantincus-cmd/history-rewritten#自托管">如何分析新事件 ↗</a></p>
         </div>
@@ -51,7 +48,7 @@
       <section id="examples" class="examples" aria-labelledby="examples-title">
         <div class="section-head"><h2 id="examples-title">从一个分岔点开始</h2><span>可交互案例</span></div>
         <div class="example-grid">
-          <button class="example" type="button" data-case="ratification-1788"><span class="example-meta">制度 · 1788</span><strong>如果新罕布什尔推迟批准美国宪法？</strong><span class="example-link">比较批准门槛 <span aria-hidden="true">↗</span></span></button>
+          <button class="example" type="button" data-case="lottery-1788"><span class="example-meta">制度 · 1788</span><strong>如果一次表决改由抽签决定？</strong><span class="example-link">查看条件概率 <span aria-hidden="true">↗</span></span></button>
           <button class="example" type="button" data-case="alaska-1867"><span class="example-meta">经济 · 1867</span><strong>如果阿拉斯加购地款分两期支付？</strong><span class="example-link">比较付款情景 <span aria-hidden="true">↗</span></span></button>
           <button class="example" type="button" data-case="ming-1644"><span class="example-meta">政治 · 1644</span><strong>如果崇祯授权太子在南京监国？</strong><span class="example-link">比较交接条件 <span aria-hidden="true">↗</span></span></button>
         </div>

@@ -33,6 +33,7 @@ type Trace = {
   after: Scalar;
   basis: string[];
   indeterminate: boolean;
+  utilities?: { action: string | boolean; value: number | null }[];
 };
 type Run = {
   scenario: string;
@@ -50,6 +51,60 @@ type Comparison = {
   change: 'unknown' | 'same' | 'higher' | 'lower' | 'different';
 };
 
+export type ForecastResult = {
+  decision: string;
+  outcome: string;
+  observations: number | null;
+  unknownMass: number | null;
+  outcomes: {
+    label: string;
+    scenarios: string[];
+    probability: { lower: number; upper: number } | null;
+  }[];
+};
+
+function deriveForecast(model: Model, runs: Run[], fullWindow: boolean, allScenarios: boolean): ForecastResult | null {
+  const forecast = model.forecast;
+  if (!forecast) return null;
+  const field = model.variables.find(({ id }) => id === model.metrics.find(({ id }) => id === forecast.metric)!.field)!;
+  const alternatives = runs.filter((run) => run.decision === forecast.decision);
+  // A partial horizon or filtered scenario cannot be treated as the registered population.
+  const weights = fullWindow && allScenarios ? forecast.weights : undefined;
+  const counts = new Map(weights?.counts.map(({ scenario, count }) => [scenario, count]));
+  const observations = weights?.counts.reduce((sum, { count }) => sum + count, 0) ?? null;
+  const unknown = alternatives.filter((run) => run.metrics[forecast.metric] === null)
+    .reduce((sum, run) => sum + (counts.get(run.scenario) ?? 0), 0);
+  return {
+    decision: forecast.decision, outcome: forecast.metric, observations,
+    unknownMass: observations ? unknown / observations : null,
+    outcomes: field.values!.map((label) => {
+      const scenarios = alternatives.filter((run) => run.metrics[forecast.metric] === label).map(({ scenario }) => scenario);
+      const count = scenarios.reduce((sum, scenario) => sum + (counts.get(scenario) ?? 0), 0);
+      return { label, scenarios, probability: observations ? { lower: count / observations, upper: (count + unknown) / observations } : null };
+    }),
+  };
+}
+
+function chooseAction(policy: NonNullable<Model['policies']>[number], read: (name: string) => Scalar) {
+  const utilities: NonNullable<Trace['utilities']> = [];
+  let best: string | boolean | null = null;
+  let maximum = -Infinity;
+  let unresolved = false;
+  const evidence = new Set(policy.basis);
+  for (const action of policy.actions) {
+    const feasible = evaluate(action.when, read);
+    if (feasible === false) continue;
+    action.basis.forEach((claim) => evidence.add(claim));
+    const value = feasible === true ? evaluate(action.utility, read) : null;
+    const score = typeof value === 'number' && Number.isFinite(value) ? value : null;
+    utilities.push({ action: action.value, value: score });
+    if (score === null) unresolved = true;
+    else if (score > maximum) { best = action.value; maximum = score; }
+    else if (score === maximum) best = null;
+  }
+  return { value: unresolved ? null : best, evidence: [...evidence], utilities };
+}
+
 function run(
   model: Model, scenario: Model['scenarios'][number], decision: Model['decisions'][number],
   horizon: number, fields: Map<string, Variable>,
@@ -63,15 +118,23 @@ function run(
   for (let step = 1; step <= horizon; step++) {
     const next = { ...state };
     const updated = new Set<string>();
+    const readFor = (actor?: string) => (name: string): Scalar => {
+      const visibility = fields.get(name)!.visibility;
+      if (actor && visibility && step < (Object.hasOwn(visibility, actor) ? visibility[actor] : Infinity)) return null;
+      return state[name];
+    };
+    for (const policy of model.policies ?? []) {
+      if (step < policy.start || step > policy.until) continue;
+      const choice = chooseAction(policy, readFor(policy.actor));
+      next[policy.target] = choice.value;
+      trace.push({
+        step, rule: policy.id, actor: policy.actor, field: policy.target, before: state[policy.target],
+        after: choice.value, basis: choice.evidence, utilities: choice.utilities, indeterminate: choice.value === null,
+      });
+    }
     for (const rule of model.rules) {
       if (step < rule.start || step > rule.until || updated.has(rule.target)) continue;
-      const read = (name: string): Scalar => {
-        const visibility = fields.get(name)!.visibility;
-        if (rule.actor && visibility && step < (Object.hasOwn(visibility, rule.actor) ? visibility[rule.actor] : Infinity)) {
-          return null;
-        }
-        return state[name];
-      };
+      const read = readFor(rule.actor);
       const enabled = evaluate(rule.when, read);
       if (enabled === false) continue;
       // An unknown higher-priority condition can change the outcome, so it blocks fallthrough.
@@ -101,7 +164,7 @@ export function simulate(input: unknown, options: { scenario?: string; horizon?:
   const model = bundle.model;
   if (!model) return {
     engineVersion: bundle.engineVersion, status: bundle.status, gaps: bundle.gaps,
-    runs: [], comparisons: [], sensitivity: [],
+    runs: [], comparisons: [], sensitivity: [], forecast: null,
   };
   const horizon = options.horizon ?? model.horizon;
   if (!Number.isInteger(horizon) || horizon < 1 || horizon > model.horizon) throw new Error('Horizon is outside the model window');
@@ -141,6 +204,7 @@ export function simulate(input: unknown, options: { scenario?: string; horizon?:
       deltaRange: numeric.length ? [Math.min(...numeric), Math.max(...numeric)] : null,
     };
   }));
-  return { engineVersion: bundle.engineVersion, status: bundle.status, horizon, gaps: bundle.gaps, runs, comparisons, sensitivity };
+  const forecast = deriveForecast(model, runs, horizon === model.horizon, scenarios.length === model.scenarios.length);
+  return { engineVersion: bundle.engineVersion, status: bundle.status, horizon, gaps: bundle.gaps, runs, comparisons, sensitivity, forecast };
 }
 export type Simulation = ReturnType<typeof simulate>;

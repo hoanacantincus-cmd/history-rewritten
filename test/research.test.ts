@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { research } from '../src/research.ts';
-import { readPublicPage } from '../src/providers.ts';
+import { decodeCompletion, readPublicPage } from '../src/providers.ts';
 import type { Providers } from '../src/providers.ts';
 import { simulate } from '../src/engine.ts';
 import { createApp } from '../src/server.ts';
@@ -23,13 +23,17 @@ function modeled(title: string) {
       variables: [
         { id: 'action', label: 'Action', kind: 'boolean', role: 'decision', initial: false, basis: cited },
         { id: 'outcome', label: 'Estimate', kind: 'number', role: 'state', initial: 0, basis: hypothesis, unit: 'units' },
+        { id: 'ending', label: 'Ending', kind: 'category', role: 'state', initial: 'unchanged', values: ['changed', 'unchanged'], basis: hypothesis },
       ],
       decisions: [{ id: 'baseline', label: 'Baseline', value: false, basis: cited },
         { id: 'change', label: 'Change', value: true, basis: hypothesis }],
       scenarios: [{ id: 'example', label: 'Example', basis: hypothesis, parameters: {} }],
       rules: [{ id: 'activate', label: 'Change estimate', target: 'outcome', start: 1, until: 1,
-        when: { ref: 'action' }, value: 1, basis: hypothesis }],
-      metrics: [{ id: 'effect', label: 'Effect', field: 'outcome' }],
+        when: { ref: 'action' }, value: 1, basis: hypothesis },
+        { id: 'update-ending', label: 'Update ending', target: 'ending', start: 1, until: 1, when: { ref: 'action' }, value: 'changed', basis: hypothesis }],
+      metrics: [{ id: 'effect', label: 'Effect', field: 'outcome' }, { id: 'ending', label: 'Ending', field: 'ending' }],
+      forecast: { decision: 'change', metric: 'ending', factors: ['internal','external','strategy','weather'].map((kind) =>
+        ({ kind, status: 'unresolved', explanation: 'Synthetic factor audit', basis: hypothesis, variables: [] })) },
     },
   };
 }
@@ -100,6 +104,13 @@ test('cites only excerpts present in a fetched or submitted source', async () =>
 test('source reading policy confines URLs to public standard HTTP(S) targets', async () => {
   await assert.rejects(readPublicPage('https://127.0.0.1/'), /not public/);
   await assert.rejects(readPublicPage('file:///archive.html'), /public HTTP/);
+});
+
+test('compatible model responses can contain one complete JSON object followed by formatting or another object', () => {
+  assert.deepEqual(decodeCompletion('prefix {"text":"quote } \\"","data":{"ok":true}}\n{"status":"extra"}'),
+    { text: 'quote } "', data: { ok: true } });
+  assert.deepEqual(decodeCompletion('{"status":"ready","model":{"actors":[]}' ), { status: 'ready', model: { actors: [] } });
+  assert.throws(() => decodeCompletion('{"text":"truncated"'), SyntaxError);
 });
 
 test('local HTTP research can produce a replayable bundle from free-form input', async () => {
