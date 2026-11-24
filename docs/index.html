@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f4ec" />
+    <link rel="icon" href="data:," />
+    <meta name="description" content="输入历史问题，查看史料、对照情景与可以复算的反事实分析。" />
+    <title>历史改写 · History Rewritten</title>
+    <script type="module" crossorigin src="./assets/index-6R3_KV3D.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DSQlLGkT.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap nav">
+        <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">✦</span><span>历史改写<small>HISTORY REWRITTEN</small></span></a>
+        <nav aria-label="主导航">
+          <a href="#examples">案例</a>
+          <a class="github" href="https://github.com/hoanacantincus-cmd/history-rewritten">GitHub <span aria-hidden="true">↗</span></a>
+        </nav>
+      </div>
+    </header>
+    <main class="wrap">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span>开源历史反事实实验室</p>
+          <h1 id="hero-title">如果历史<br><em>换一种走法？</em></h1>
+          <p class="intro">写一句关于历史的「如果」。从史料检索到各方行动和可能走向，系统自动完成。</p>
+          <form id="research-form">
+            <div class="question-input">
+              <label for="question">你的历史问题</label>
+              <textarea id="question" name="question" required maxlength="1200" rows="3"
+                placeholder="如果岳飞得到了皇帝的全部信任，南宋将会如何？"></textarea>
+            </div>
+            <details id="personal-key-panel" class="personal-key" hidden>
+              <summary>使用自己的模型 API Key</summary>
+              <label for="personal-key">API Key</label>
+              <input id="personal-key" type="password" autocomplete="off" spellcheck="false" maxlength="514"
+                aria-describedby="personal-key-note" placeholder="粘贴模型 API Key" />
+              <label id="personal-provider-label" for="personal-provider" hidden>密钥供应商
+                <select id="personal-provider"><option value="">请选择</option></select>
+              </label>
+              <p id="personal-key-note" aria-live="polite">支持 OpenAI、Claude、Gemini、DeepSeek、通义千问、Kimi、Grok 和 OpenRouter。调用走你的账户，密钥仅用于本页。</p>
+            </details>
+            <div class="action-row">
+              <button class="button primary" type="submit" id="research-button">预览推演 <span aria-hidden="true">→</span></button>
+              <button class="button secondary" type="button" id="sample-question">观看岳飞推演示例</button>
+              <label class="button secondary import-button">导入分析包<input type="file" id="import" accept=".json,application/json" /></label>
+            </div>
+          </form>
+          <p class="hero-note" id="mode-note">公开页可推演示例。<a href="https://github.com/hoanacantincus-cmd/history-rewritten#自托管">自托管后可分析新问题 ↗</a></p>
+        </div>
+        <figure class="atlas">
+          <div class="atlas-image">
+            <img src="./world-map.webp" alt="奥特里乌斯绘制的旧版世界地图" width="1100" height="720" />
+          </div>
+          <figcaption><i aria-hidden="true"></i><span>世界地图 · 亚伯拉罕·奥特里乌斯</span><a href="https://library.missouri.edu/specialcollections/items/show/1339">查看馆藏 ↗</a></figcaption>
+        </figure>
+      </section>
+      <div id="status" role="status" aria-live="polite" hidden></div>
+      <section id="work-progress" class="monitor progress-panel" aria-label="推演进度" tabindex="-1" hidden></section>
+      <section id="examples" class="examples" aria-labelledby="examples-title">
+        <div class="section-head"><h2 id="examples-title">从一个分岔点开始</h2><span>可交互案例</span></div>
+        <div class="example-grid">
+          <button class="example" type="button" data-case="lottery-1788"><span class="example-meta">制度 · 1788</span><strong>如果一次表决改由抽签决定？</strong><span class="example-link">查看条件概率 <span aria-hidden="true">↗</span></span></button>
+          <button class="example" type="button" data-case="alaska-1867"><span class="example-meta">经济 · 1867</span><strong>如果阿拉斯加购地款分两期支付？</strong><span class="example-link">比较付款情景 <span aria-hidden="true">↗</span></span></button>
+          <button class="example" type="button" data-case="yue-fei-1141"><span class="example-meta">政治 · 1141</span><strong>如果岳飞得到了皇帝的全部信任？</strong><span class="example-link">查看各方反应 <span aria-hidden="true">↗</span></span></button>
+        </div>
+      </section>
+      <section id="results" class="results" aria-labelledby="results-title" tabindex="-1" hidden></section>
+    </main>
+    <footer class="wrap footer"><span>历史改写 · History Rewritten</span><a href="https://github.com/hoanacantincus-cmd/history-rewritten#分析方法">分析方法 ↗</a></footer>
+  </body>
+</html>

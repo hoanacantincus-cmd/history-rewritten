@@ -1,0 +1,1569 @@
+{
+  "status": "ready",
+  "title": "如果岳飞得到了皇帝的全部信任，南宋将会如何？",
+  "scope": "以绍兴十一年八月罢岳飞的节点起算一年。将「全部信任」落实为继续授权岳飞参与对金议政，并观察是否改变和议议程。可检验的签约史实集中在当年秋冬；较晚反应、长期国势和反事实签约结果仍可能未知。",
+  "claims": [
+    {
+      "id": "dismissal",
+      "text": "绍兴十一年八月，宋高宗罢岳飞。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年八月",
+          "quote": "甲戌，罷岳飛。乙亥"
+        }
+      ]
+    },
+    {
+      "id": "office",
+      "text": "同年春夏，岳飞曾任枢密副使，秦桧进尚书左仆射并兼枢密使。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年四月",
+          "quote": "俊並爲樞密使，飛樞密副使"
+        },
+        {
+          "source": "annals",
+          "locator": "绍兴十一年六月",
+          "quote": "加秦檜特進，進尚書左僕射"
+        }
+      ]
+    },
+    {
+      "id": "yue-position",
+      "text": "据《宋史·岳飞传》，岳飞对议和安排表达过异议。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "biography",
+          "locator": "绍兴九年",
+          "quote": "飛表謝，寓和議不便之意"
+        }
+      ]
+    },
+    {
+      "id": "drought",
+      "text": "本纪记有当年秋七月的旱情与朝廷应对。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年七月",
+          "quote": "以旱，減膳祈禱，遣官"
+        }
+      ]
+    },
+    {
+      "id": "treasury",
+      "text": "在分岔前，南宋朝廷已经设置三道总领军马钱粮官。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年五月",
+          "quote": "置兩淮、江東西、湖廣京西三道總領軍馬錢糧官"
+        }
+      ]
+    },
+    {
+      "id": "jin-border",
+      "text": "据《金史·宗弼传》，金方此前有恢复其所主张的旧疆的政策，领土条款具有政治成本。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "jin-record",
+          "locator": "宗弼传 · 天眷年间",
+          "quote": "遂命元帥府復河南疆土詔中外"
+        }
+      ]
+    },
+    {
+      "id": "mandate-basis",
+      "text": "以皇帝在罢免节点维持岳飞参与对金议政的授权表示信任。授予发言与提交建议的权限，并不自动修改国策。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "court-basis",
+      "text": "朝廷需要能组织复议才会更换使节任务。协调能力没有可度量的记录，用能、不能两种条件检验。秦桧的偏好排序是可更换的假设。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "terms-basis",
+      "text": "能协调时，南宋可提出保留边界框架并补充履约保障的修订，也可能提出金方成本更高的边界修订。史料无法确定反事实中会采用哪一类。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "bargain-basis",
+      "text": "在这个有限模型中，金方会考虑更容易执行的修订；涉及边界时优先要求恢复旧议程。效用只表达假设的优先级。尚无直接史料能确认这两个反事实行动。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "carry-basis",
+      "text": "模型追踪首次议程分歧及最晚可查的签约节点。没有补足的下一轮就记为未知，观察窗余下时间不外推政权存亡。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "treaty",
+      "text": "当年十一月，宋与金达成和议。",
+      "status": "supported",
+      "scope": "observed",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年十一月",
+          "quote": "是月，與金國和議成，立盟書"
+        }
+      ]
+    },
+    {
+      "id": "envoy-audit",
+      "text": "绍兴十一年十月，南宋派魏良臣、王公亮作为稟议使。",
+      "status": "supported",
+      "scope": "observed",
+      "citations": [
+        {
+          "source": "annals",
+          "locator": "绍兴十一年十月",
+          "quote": "遣魏良臣、王公亮爲金國稟議使"
+        }
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "label": "岳飞入任枢密副使",
+      "when": "绍兴十一年四月",
+      "basis": [
+        "office"
+      ]
+    },
+    {
+      "label": "朝廷设置三道军马钱粮官",
+      "when": "绍兴十一年五月",
+      "basis": [
+        "treasury"
+      ]
+    },
+    {
+      "label": "正式罢岳飞，分岔点",
+      "when": "绍兴十一年八月",
+      "basis": [
+        "dismissal"
+      ]
+    },
+    {
+      "label": "魏良臣等出使",
+      "when": "绍兴十一年十月",
+      "basis": [
+        "envoy-audit"
+      ]
+    },
+    {
+      "label": "宋金立盟书",
+      "when": "绍兴十一年十一月",
+      "basis": [
+        "treaty"
+      ]
+    }
+  ],
+  "gaps": [
+    "边界和履约保障只是用于比较的条款类型，没有史料可以观测反事实中的实际提案或给它们赋频率。",
+    "宋、金两部纪传材料均为后修史书。此处用它们核对已记载的行动与时期，未将任何人物的内心视为已查明。",
+    "已有旱情记载，缺乏它改变本轮外交选择的定量材料。天气保留为未解决因素。",
+    "史实条件只核对出使和达成和议。这个小模型不能推断十二个月之后的国势。"
+  ],
+  "options": [],
+  "model": {
+    "horizon": 5,
+    "stepLabel": "外交阶段（授权、朝议、出使、金方反应、观察窗结束）",
+    "decisionPoint": "绍兴十一年八月罢岳飞。保持其余历史初始条件，让岳飞继续参与对金议政。",
+    "decisionBasis": [
+      "dismissal",
+      "office"
+    ],
+    "actors": [
+      {
+        "id": "emperor",
+        "label": "宋高宗",
+        "objective": "决定是否让岳飞继续参与对金议政，并保有使节和国策决定权。",
+        "basis": [
+          "office",
+          "mandate-basis"
+        ]
+      },
+      {
+        "id": "yue",
+        "label": "岳飞",
+        "objective": "有授权时提出复议建议，依据传记中曾表达过的议和异议。",
+        "basis": [
+          "yue-position",
+          "mandate-basis"
+        ]
+      },
+      {
+        "id": "qin",
+        "label": "秦桧与议和朝臣",
+        "objective": "把朝内协调能力和可执行条款转化为使节任务。",
+        "basis": [
+          "office",
+          "treasury",
+          "court-basis"
+        ]
+      },
+      {
+        "id": "jin",
+        "label": "金方交涉者",
+        "objective": "比较收到的条款与维护既有边界主张之间的代价。",
+        "basis": [
+          "jin-border",
+          "bargain-basis"
+        ]
+      }
+    ],
+    "variables": [
+      {
+        "id": "trust",
+        "label": "继续授权岳飞议政",
+        "kind": "boolean",
+        "role": "decision",
+        "initial": false,
+        "basis": [
+          "dismissal",
+          "mandate-basis"
+        ]
+      },
+      {
+        "id": "coordination",
+        "label": "朝廷能否协调复议",
+        "kind": "boolean",
+        "role": "parameter",
+        "initial": null,
+        "basis": [
+          "court-basis"
+        ],
+        "visibility": {
+          "qin": 3
+        }
+      },
+      {
+        "id": "offer",
+        "label": "是否有不改边界的履约方案",
+        "kind": "boolean",
+        "role": "parameter",
+        "initial": null,
+        "basis": [
+          "treasury",
+          "terms-basis"
+        ],
+        "visibility": {
+          "qin": 3
+        }
+      },
+      {
+        "id": "mandate",
+        "label": "已发出的议政授权",
+        "kind": "boolean",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "mandate-basis"
+        ],
+        "visibility": {
+          "yue": 2
+        }
+      },
+      {
+        "id": "proposal",
+        "label": "岳飞是否提交复议建议",
+        "kind": "boolean",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "yue-position",
+          "mandate-basis"
+        ],
+        "visibility": {
+          "qin": 3
+        }
+      },
+      {
+        "id": "agenda",
+        "label": "使节收到的议程",
+        "kind": "category",
+        "role": "state",
+        "values": [
+          "按既有框架出使",
+          "提交有履约保障的修订",
+          "提出边界修订"
+        ],
+        "initial": null,
+        "basis": [
+          "court-basis",
+          "terms-basis"
+        ],
+        "visibility": {
+          "jin": 4
+        }
+      },
+      {
+        "id": "envoy-sent",
+        "label": "使节已奉命出使",
+        "kind": "boolean",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "reply",
+        "label": "金方所选答复",
+        "kind": "category",
+        "role": "state",
+        "values": [
+          "按既有框架继续",
+          "进入修订磋商",
+          "要求回到既有框架"
+        ],
+        "initial": null,
+        "basis": [
+          "jin-border",
+          "bargain-basis"
+        ]
+      },
+      {
+        "id": "direction",
+        "label": "宋金议和走向",
+        "kind": "category",
+        "role": "state",
+        "values": [
+          "延续原议程",
+          "重启条款磋商",
+          "出现议程分歧"
+        ],
+        "initial": null,
+        "basis": [
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "pact",
+        "label": "在可核对阶段达成和议",
+        "kind": "boolean",
+        "role": "state",
+        "initial": null,
+        "basis": [
+          "carry-basis"
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "recorded",
+        "label": "史实分支 · 罢岳飞",
+        "value": false,
+        "basis": [
+          "dismissal"
+        ]
+      },
+      {
+        "id": "trusted",
+        "label": "改写分支 · 维持授权",
+        "value": true,
+        "basis": [
+          "mandate-basis"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "historical-context",
+        "label": "冻结的史实条件",
+        "basis": [
+          "dismissal",
+          "office"
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "no-coordination",
+        "label": "朝廷难以协调，存在履约方案",
+        "basis": [
+          "court-basis",
+          "terms-basis"
+        ],
+        "parameters": {
+          "coordination": false,
+          "offer": true
+        }
+      },
+      {
+        "id": "assured-revision",
+        "label": "朝廷可协调，存在履约方案",
+        "basis": [
+          "court-basis",
+          "terms-basis"
+        ],
+        "parameters": {
+          "coordination": true,
+          "offer": true
+        }
+      },
+      {
+        "id": "boundary-revision",
+        "label": "朝廷可协调，仅提出边界修订",
+        "basis": [
+          "court-basis",
+          "terms-basis"
+        ],
+        "parameters": {
+          "coordination": true,
+          "offer": false
+        }
+      }
+    ],
+    "rules": [
+      {
+        "id": "issue",
+        "label": "宋高宗决定议政授权",
+        "target": "mandate",
+        "actor": "emperor",
+        "start": 1,
+        "until": 1,
+        "when": true,
+        "value": {
+          "ref": "trust"
+        },
+        "basis": [
+          "dismissal",
+          "mandate-basis"
+        ]
+      },
+      {
+        "id": "dispatch-record",
+        "label": "记录已有使节议程",
+        "target": "envoy-sent",
+        "start": 4,
+        "until": 4,
+        "when": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "ref": "agenda"
+                },
+                "按既有框架出使"
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "ref": "agenda"
+                    },
+                    "提交有履约保障的修订"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "ref": "agenda"
+                    },
+                    "提出边界修订"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "value": true,
+        "basis": [
+          "terms-basis",
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "normal-track",
+        "label": "既有议程继续",
+        "target": "direction",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "reply"
+            },
+            "按既有框架继续"
+          ]
+        },
+        "value": "延续原议程",
+        "basis": [
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "reopen-track",
+        "label": "转入修订磋商",
+        "target": "direction",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "reply"
+            },
+            "进入修订磋商"
+          ]
+        },
+        "value": "重启条款磋商",
+        "basis": [
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "delay-track",
+        "label": "两方议程出现分歧",
+        "target": "direction",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "reply"
+            },
+            "要求回到既有框架"
+          ]
+        },
+        "value": "出现议程分歧",
+        "basis": [
+          "carry-basis"
+        ]
+      },
+      {
+        "id": "agreement-track",
+        "label": "既有议程路径达成和议",
+        "target": "pact",
+        "start": 5,
+        "until": 5,
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "ref": "reply"
+            },
+            "按既有框架继续"
+          ]
+        },
+        "value": true,
+        "basis": [
+          "carry-basis"
+        ]
+      }
+    ],
+    "metrics": [
+      {
+        "id": "direction",
+        "label": "宋金议和走向",
+        "field": "direction"
+      },
+      {
+        "id": "agreement",
+        "label": "在可核对阶段达成和议",
+        "field": "pact"
+      }
+    ],
+    "policies": [
+      {
+        "id": "proposal-choice",
+        "label": "岳飞决定是否递交建议",
+        "actor": "yue",
+        "target": "proposal",
+        "start": 2,
+        "until": 2,
+        "basis": [
+          "yue-position",
+          "mandate-basis"
+        ],
+        "actions": [
+          {
+            "value": true,
+            "when": {
+              "ref": "mandate"
+            },
+            "utility": 2,
+            "basis": [
+              "yue-position",
+              "mandate-basis"
+            ]
+          },
+          {
+            "value": false,
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "mandate-basis"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "agenda-choice",
+        "label": "朝廷选择使节议程",
+        "actor": "qin",
+        "target": "agenda",
+        "start": 3,
+        "until": 3,
+        "basis": [
+          "office",
+          "court-basis"
+        ],
+        "actions": [
+          {
+            "value": "按既有框架出使",
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "office",
+              "court-basis"
+            ]
+          },
+          {
+            "value": "提交有履约保障的修订",
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "ref": "proposal"
+                    },
+                    {
+                      "ref": "coordination"
+                    }
+                  ]
+                },
+                {
+                  "ref": "offer"
+                }
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "court-basis",
+              "terms-basis"
+            ]
+          },
+          {
+            "value": "提出边界修订",
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "ref": "proposal"
+                    },
+                    {
+                      "ref": "coordination"
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "ref": "offer"
+                    }
+                  ]
+                }
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "court-basis",
+              "terms-basis"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "response-choice",
+        "label": "金方比较已收到的议程",
+        "actor": "jin",
+        "target": "reply",
+        "start": 4,
+        "until": 4,
+        "basis": [
+          "jin-border",
+          "bargain-basis"
+        ],
+        "actions": [
+          {
+            "value": "按既有框架继续",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "ref": "agenda"
+                },
+                "按既有框架出使"
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "jin-border",
+              "bargain-basis"
+            ]
+          },
+          {
+            "value": "要求回到既有框架",
+            "when": true,
+            "utility": 1,
+            "basis": [
+              "jin-border",
+              "bargain-basis"
+            ]
+          },
+          {
+            "value": "进入修订磋商",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "ref": "agenda"
+                },
+                "提交有履约保障的修订"
+              ]
+            },
+            "utility": 2,
+            "basis": [
+              "terms-basis",
+              "bargain-basis"
+            ]
+          }
+        ]
+      }
+    ],
+    "forecast": {
+      "decision": "trusted",
+      "metric": "direction",
+      "factors": [
+        {
+          "kind": "internal",
+          "status": "modeled",
+          "explanation": "分岔点保留授权，朝廷协调能力以情景条件比较。",
+          "basis": [
+            "office",
+            "court-basis"
+          ],
+          "variables": [
+            "mandate",
+            "coordination"
+          ]
+        },
+        {
+          "kind": "external",
+          "status": "modeled",
+          "explanation": "使节提交的条款结构改变金方交涉成本，反事实偏好排名为假设。",
+          "basis": [
+            "jin-border",
+            "bargain-basis"
+          ],
+          "variables": [
+            "agenda",
+            "reply"
+          ]
+        },
+        {
+          "kind": "strategy",
+          "status": "modeled",
+          "explanation": "建议、使节任务和外方答复经过三个不同时点的选择。",
+          "basis": [
+            "yue-position",
+            "court-basis",
+            "bargain-basis"
+          ],
+          "variables": [
+            "proposal",
+            "agenda",
+            "reply"
+          ]
+        },
+        {
+          "kind": "weather",
+          "status": "unresolved",
+          "explanation": "史料记有当年七月旱情，暂无可核对资料说明它改变此轮议程。",
+          "basis": [
+            "drought"
+          ],
+          "variables": []
+        }
+      ]
+    }
+  },
+  "schemaVersion": 3,
+  "engineVersion": "3",
+  "audit": {
+    "start": "绍兴十一年八月罢岳飞",
+    "end": "绍兴十二年八月",
+    "interpretation": "维持岳飞的枢密院议政权限；唯一直接改写的条件是宋高宗是否保留授权。",
+    "historicalScenario": "historical-context",
+    "observations": [
+      {
+        "step": 4,
+        "field": "envoy-sent",
+        "value": true,
+        "basis": [
+          "envoy-audit"
+        ]
+      },
+      {
+        "step": 5,
+        "field": "pact",
+        "value": true,
+        "basis": [
+          "treaty"
+        ]
+      }
+    ]
+  },
+  "question": "如果岳飞得到了皇帝的全部信任，南宋将会如何？",
+  "sources": [
+    {
+      "id": "annals",
+      "title": "《宋史》卷二十九 · 高宗本纪",
+      "url": "https://zh.wikisource.org/wiki/宋史/卷029",
+      "accessed": "2026-11-21",
+      "origin": "web"
+    },
+    {
+      "id": "biography",
+      "title": "《宋史》卷三百六十五 · 岳飞传",
+      "url": "https://zh.wikisource.org/wiki/宋史/卷365",
+      "accessed": "2026-11-21",
+      "origin": "web"
+    },
+    {
+      "id": "jin-record",
+      "title": "《金史》四库全书本 · 卷七十七宗弼传",
+      "url": "https://zh.wikisource.org/wiki/金史_(四庫全書本)/卷077",
+      "accessed": "2026-11-21",
+      "origin": "web"
+    }
+  ],
+  "runRecord": {
+    "historicalAudit": {
+      "status": "consistent",
+      "observations": [
+        {
+          "step": 4,
+          "field": "envoy-sent",
+          "value": true,
+          "basis": [
+            "envoy-audit"
+          ],
+          "calculated": true,
+          "result": "matched"
+        },
+        {
+          "step": 5,
+          "field": "pact",
+          "value": true,
+          "basis": [
+            "treaty"
+          ],
+          "calculated": true,
+          "result": "matched"
+        }
+      ],
+      "divergence": {
+        "step": 1,
+        "changes": [
+          {
+            "field": "mandate",
+            "before": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    "switches": [
+      {
+        "parameter": "coordination",
+        "from": false,
+        "to": true,
+        "beforeScenario": "no-coordination",
+        "afterScenario": "assured-revision",
+        "before": "延续原议程",
+        "after": "重启条款磋商"
+      },
+      {
+        "parameter": "offer",
+        "from": true,
+        "to": false,
+        "beforeScenario": "assured-revision",
+        "afterScenario": "boundary-revision",
+        "before": "重启条款磋商",
+        "after": "出现议程分歧"
+      }
+    ],
+    "runs": [
+      {
+        "scenario": "historical-context",
+        "decision": "recorded",
+        "metrics": {
+          "direction": "延续原议程",
+          "agreement": true
+        },
+        "trace": [
+          {
+            "step": 1,
+            "rule": "issue",
+            "field": "mandate",
+            "actor": "emperor",
+            "before": null,
+            "after": false,
+            "basis": [
+              "dismissal",
+              "mandate-basis"
+            ],
+            "indeterminate": false,
+            "reads": [
+              "trust"
+            ],
+            "observations": [
+              {
+                "field": "trust",
+                "value": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "rule": "proposal-choice",
+            "actor": "yue",
+            "field": "proposal",
+            "before": null,
+            "after": false,
+            "basis": [
+              "yue-position",
+              "mandate-basis"
+            ],
+            "utilities": [
+              {
+                "action": false,
+                "value": 1
+              }
+            ],
+            "indeterminate": false,
+            "reads": [
+              "mandate"
+            ],
+            "candidates": [
+              {
+                "action": true,
+                "feasible": false,
+                "utility": null,
+                "basis": [
+                  "yue-position",
+                  "mandate-basis"
+                ]
+              },
+              {
+                "action": false,
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "mandate-basis"
+                ]
+              }
+            ],
+            "observations": [
+              {
+                "field": "mandate",
+                "value": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "rule": "agenda-choice",
+            "actor": "qin",
+            "field": "agenda",
+            "before": null,
+            "after": "按既有框架出使",
+            "basis": [
+              "office",
+              "court-basis"
+            ],
+            "utilities": [
+              {
+                "action": "按既有框架出使",
+                "value": 1
+              }
+            ],
+            "indeterminate": false,
+            "reads": [
+              "proposal"
+            ],
+            "candidates": [
+              {
+                "action": "按既有框架出使",
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "office",
+                  "court-basis"
+                ]
+              },
+              {
+                "action": "提交有履约保障的修订",
+                "feasible": false,
+                "utility": null,
+                "basis": [
+                  "court-basis",
+                  "terms-basis"
+                ]
+              },
+              {
+                "action": "提出边界修订",
+                "feasible": false,
+                "utility": null,
+                "basis": [
+                  "court-basis",
+                  "terms-basis"
+                ]
+              }
+            ],
+            "observations": [
+              {
+                "field": "proposal",
+                "value": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "rule": "response-choice",
+            "actor": "jin",
+            "field": "reply",
+            "before": null,
+            "after": "按既有框架继续",
+            "basis": [
+              "jin-border",
+              "bargain-basis"
+            ],
+            "utilities": [
+              {
+                "action": "按既有框架继续",
+                "value": 2
+              },
+              {
+                "action": "要求回到既有框架",
+                "value": 1
+              }
+            ],
+            "indeterminate": false,
+            "reads": [
+              "agenda"
+            ],
+            "candidates": [
+              {
+                "action": "按既有框架继续",
+                "feasible": true,
+                "utility": 2,
+                "basis": [
+                  "jin-border",
+                  "bargain-basis"
+                ]
+              },
+              {
+                "action": "要求回到既有框架",
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "jin-border",
+                  "bargain-basis"
+                ]
+              },
+              {
+                "action": "进入修订磋商",
+                "feasible": false,
+                "utility": null,
+                "basis": [
+                  "terms-basis",
+                  "bargain-basis"
+                ]
+              }
+            ],
+            "observations": [
+              {
+                "field": "agenda",
+                "value": "按既有框架出使"
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "rule": "dispatch-record",
+            "field": "envoy-sent",
+            "before": null,
+            "after": true,
+            "basis": [
+              "terms-basis",
+              "carry-basis"
+            ],
+            "indeterminate": false,
+            "observations": []
+          },
+          {
+            "step": 5,
+            "rule": "normal-track",
+            "field": "direction",
+            "before": null,
+            "after": "延续原议程",
+            "basis": [
+              "carry-basis"
+            ],
+            "indeterminate": false,
+            "observations": []
+          },
+          {
+            "step": 5,
+            "rule": "agreement-track",
+            "field": "pact",
+            "before": null,
+            "after": true,
+            "basis": [
+              "carry-basis"
+            ],
+            "indeterminate": false,
+            "observations": []
+          }
+        ],
+        "states": {
+          "0": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": null,
+            "proposal": null,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "1": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": false,
+            "proposal": null,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "2": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": false,
+            "proposal": false,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "3": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": false,
+            "proposal": false,
+            "agenda": "按既有框架出使",
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "4": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": false,
+            "proposal": false,
+            "agenda": "按既有框架出使",
+            "envoy-sent": true,
+            "reply": "按既有框架继续",
+            "direction": null,
+            "pact": null
+          },
+          "5": {
+            "trust": false,
+            "coordination": null,
+            "offer": null,
+            "mandate": false,
+            "proposal": false,
+            "agenda": "按既有框架出使",
+            "envoy-sent": true,
+            "reply": "按既有框架继续",
+            "direction": "延续原议程",
+            "pact": true
+          }
+        }
+      },
+      {
+        "scenario": "historical-context",
+        "decision": "trusted",
+        "metrics": {
+          "direction": null,
+          "agreement": null
+        },
+        "trace": [
+          {
+            "step": 1,
+            "rule": "issue",
+            "field": "mandate",
+            "actor": "emperor",
+            "before": null,
+            "after": true,
+            "basis": [
+              "dismissal",
+              "mandate-basis"
+            ],
+            "indeterminate": false,
+            "reads": [
+              "trust"
+            ],
+            "observations": [
+              {
+                "field": "trust",
+                "value": true
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "rule": "proposal-choice",
+            "actor": "yue",
+            "field": "proposal",
+            "before": null,
+            "after": true,
+            "basis": [
+              "yue-position",
+              "mandate-basis"
+            ],
+            "utilities": [
+              {
+                "action": true,
+                "value": 2
+              },
+              {
+                "action": false,
+                "value": 1
+              }
+            ],
+            "indeterminate": false,
+            "reads": [
+              "mandate"
+            ],
+            "candidates": [
+              {
+                "action": true,
+                "feasible": true,
+                "utility": 2,
+                "basis": [
+                  "yue-position",
+                  "mandate-basis"
+                ]
+              },
+              {
+                "action": false,
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "mandate-basis"
+                ]
+              }
+            ],
+            "observations": [
+              {
+                "field": "mandate",
+                "value": true
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "rule": "agenda-choice",
+            "actor": "qin",
+            "field": "agenda",
+            "before": null,
+            "after": null,
+            "basis": [
+              "office",
+              "court-basis",
+              "terms-basis"
+            ],
+            "utilities": [
+              {
+                "action": "按既有框架出使",
+                "value": 1
+              },
+              {
+                "action": "提交有履约保障的修订",
+                "value": null
+              },
+              {
+                "action": "提出边界修订",
+                "value": null
+              }
+            ],
+            "indeterminate": true,
+            "reads": [
+              "proposal"
+            ],
+            "candidates": [
+              {
+                "action": "按既有框架出使",
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "office",
+                  "court-basis"
+                ]
+              },
+              {
+                "action": "提交有履约保障的修订",
+                "feasible": null,
+                "utility": null,
+                "basis": [
+                  "court-basis",
+                  "terms-basis"
+                ]
+              },
+              {
+                "action": "提出边界修订",
+                "feasible": null,
+                "utility": null,
+                "basis": [
+                  "court-basis",
+                  "terms-basis"
+                ]
+              }
+            ],
+            "observations": [
+              {
+                "field": "proposal",
+                "value": true
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "rule": "response-choice",
+            "actor": "jin",
+            "field": "reply",
+            "before": null,
+            "after": null,
+            "basis": [
+              "jin-border",
+              "bargain-basis",
+              "terms-basis"
+            ],
+            "utilities": [
+              {
+                "action": "按既有框架继续",
+                "value": null
+              },
+              {
+                "action": "要求回到既有框架",
+                "value": 1
+              },
+              {
+                "action": "进入修订磋商",
+                "value": null
+              }
+            ],
+            "indeterminate": true,
+            "candidates": [
+              {
+                "action": "按既有框架继续",
+                "feasible": null,
+                "utility": null,
+                "basis": [
+                  "jin-border",
+                  "bargain-basis"
+                ]
+              },
+              {
+                "action": "要求回到既有框架",
+                "feasible": true,
+                "utility": 1,
+                "basis": [
+                  "jin-border",
+                  "bargain-basis"
+                ]
+              },
+              {
+                "action": "进入修订磋商",
+                "feasible": null,
+                "utility": null,
+                "basis": [
+                  "terms-basis",
+                  "bargain-basis"
+                ]
+              }
+            ],
+            "observations": []
+          },
+          {
+            "step": 4,
+            "rule": "dispatch-record",
+            "field": "envoy-sent",
+            "before": null,
+            "after": null,
+            "basis": [
+              "terms-basis",
+              "carry-basis"
+            ],
+            "indeterminate": true,
+            "observations": []
+          },
+          {
+            "step": 5,
+            "rule": "normal-track",
+            "field": "direction",
+            "before": null,
+            "after": null,
+            "basis": [
+              "carry-basis"
+            ],
+            "indeterminate": true,
+            "observations": []
+          },
+          {
+            "step": 5,
+            "rule": "agreement-track",
+            "field": "pact",
+            "before": null,
+            "after": null,
+            "basis": [
+              "carry-basis"
+            ],
+            "indeterminate": true,
+            "observations": []
+          }
+        ],
+        "states": {
+          "0": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": null,
+            "proposal": null,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "1": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": true,
+            "proposal": null,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "2": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": true,
+            "proposal": true,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "3": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": true,
+            "proposal": true,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "4": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": true,
+            "proposal": true,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          },
+          "5": {
+            "trust": true,
+            "coordination": null,
+            "offer": null,
+            "mandate": true,
+            "proposal": true,
+            "agenda": null,
+            "envoy-sent": null,
+            "reply": null,
+            "direction": null,
+            "pact": null
+          }
+        }
+      }
+    ]
+  }
+}

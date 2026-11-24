@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "1",
+  "status": "ready",
+  "options": [],
+  "title": "如果新罕布什尔推迟批准美国宪法？",
+  "question": "如果新罕布什尔在 1788 年 6 月没有批准宪法，批准门槛何时达到？",
+  "scope": "比较 1788 年 6 月新罕布什尔和弗吉尼亚两次表决前后的州数。门槛采用宪法第七条，后一次表决的走向作为共享情景。",
+  "sources": [
+    {
+      "id": "constitution",
+      "title": "美国国家档案馆 · 宪法原文",
+      "url": "https://www.archives.gov/founding-docs/constitution-transcript",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    },
+    {
+      "id": "history",
+      "title": "美国国家档案馆 · 制宪史",
+      "url": "https://www.archives.gov/founding-docs/more-perfect-union",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    },
+    {
+      "id": "archive",
+      "title": "美国国家档案馆 · 制宪问答",
+      "url": "https://www.archives.gov/founding-docs/constitution-q-and-a",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    }
+  ],
+  "claims": [
+    {
+      "id": "threshold",
+      "text": "宪法第七条以九州批准作为在批准各州之间成立的门槛。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "constitution",
+          "locator": "Article VII",
+          "quote": "The Ratification of the Conventions of nine States, shall be sufficient"
+        }
+      ]
+    },
+    {
+      "id": "prior",
+      "text": "南卡罗来纳批准后，到新罕布什尔表决前，已有八州批准。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "history",
+          "locator": "Ratification",
+          "quote": "New Hampshire thus became the ninth state to ratify"
+        }
+      ]
+    },
+    {
+      "id": "nh-vote",
+      "text": "1788 年 6 月 21 日，新罕布什尔会议批准宪法。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "archive",
+          "locator": "When did the United States government go into operation under the Constitution?",
+          "quote": "the ninth State, New Hampshire, June 21, 1788."
+        }
+      ]
+    },
+    {
+      "id": "virginia-date",
+      "text": "史实中弗吉尼亚于 1788 年 6 月批准宪法。",
+      "status": "supported",
+      "scope": "observed",
+      "citations": [
+        {
+          "source": "history",
+          "locator": "Ratification",
+          "quote": "Virginia and New York both ratified"
+        }
+      ]
+    },
+    {
+      "id": "virginia-assumption",
+      "text": "弗吉尼亚是否在随后会议批准作为外部条件。推迟新罕布什尔批准可能影响其他州，这个演示用两组情景比较，未建模影响机制。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    }
+  ],
+  "timeline": [
+    {
+      "when": "1788 年 6 月 21 日",
+      "label": "新罕布什尔成为第九个批准州",
+      "basis": [
+        "nh-vote"
+      ]
+    },
+    {
+      "when": "1788 年 6 月下旬",
+      "label": "弗吉尼亚批准宪法",
+      "basis": [
+        "virginia-date"
+      ]
+    }
+  ],
+  "gaps": [
+    "各州之间的说服、联盟与时间延后效果留在本次模型范围以外。"
+  ],
+  "model": {
+    "decisionPoint": "1788 年 6 月 21 日，新罕布什尔批准会议作出选择。",
+    "decisionBasis": [
+      "nh-vote"
+    ],
+    "horizon": 2,
+    "stepLabel": "次表决",
+    "actors": [
+      {
+        "id": "nh",
+        "label": "新罕布什尔州批准会议"
+      },
+      {
+        "id": "va",
+        "label": "弗吉尼亚州批准会议"
+      }
+    ],
+    "variables": [
+      {
+        "id": "approve",
+        "label": "新罕布什尔批准",
+        "role": "decision",
+        "kind": "boolean",
+        "initial": true,
+        "basis": [
+          "nh-vote"
+        ]
+      },
+      {
+        "id": "va-approves",
+        "label": "弗吉尼亚随后批准",
+        "role": "parameter",
+        "kind": "boolean",
+        "initial": true,
+        "basis": [
+          "virginia-assumption"
+        ]
+      },
+      {
+        "id": "total",
+        "label": "已批准州数",
+        "role": "state",
+        "kind": "number",
+        "initial": 8,
+        "basis": [
+          "prior"
+        ],
+        "unit": "州"
+      },
+      {
+        "id": "threshold",
+        "label": "是否达到九州门槛",
+        "role": "state",
+        "kind": "boolean",
+        "initial": false,
+        "basis": [
+          "prior",
+          "threshold"
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "baseline",
+        "label": "按史实批准",
+        "value": true,
+        "basis": [
+          "nh-vote"
+        ]
+      },
+      {
+        "id": "defer",
+        "label": "推迟批准",
+        "value": false,
+        "basis": [
+          "virginia-assumption"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "va-yes",
+        "label": "弗吉尼亚随后批准",
+        "parameters": {
+          "va-approves": true
+        },
+        "basis": [
+          "virginia-assumption"
+        ]
+      },
+      {
+        "id": "va-no",
+        "label": "弗吉尼亚也推迟",
+        "parameters": {
+          "va-approves": false
+        },
+        "basis": [
+          "virginia-assumption"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "nh-count",
+        "label": "新罕布什尔批准使已批准州数增加一",
+        "target": "total",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "ref": "approve"
+        },
+        "value": {
+          "op": "add",
+          "args": [
+            {
+              "ref": "total"
+            },
+            1
+          ]
+        },
+        "basis": [
+          "nh-vote"
+        ],
+        "actor": "nh"
+      },
+      {
+        "id": "nh-gate",
+        "label": "本次表决达到九州门槛",
+        "target": "threshold",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "ref": "approve"
+            },
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "ref": "total"
+                },
+                8
+              ]
+            }
+          ]
+        },
+        "value": true,
+        "basis": [
+          "threshold"
+        ],
+        "actor": "nh"
+      },
+      {
+        "id": "va-count",
+        "label": "弗吉尼亚批准使已批准州数增加一",
+        "target": "total",
+        "start": 2,
+        "until": 2,
+        "when": {
+          "ref": "va-approves"
+        },
+        "value": {
+          "op": "add",
+          "args": [
+            {
+              "ref": "total"
+            },
+            1
+          ]
+        },
+        "basis": [
+          "virginia-assumption"
+        ],
+        "actor": "va"
+      },
+      {
+        "id": "va-gate",
+        "label": "弗吉尼亚批准后检查九州门槛",
+        "target": "threshold",
+        "start": 2,
+        "until": 2,
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "ref": "va-approves"
+            },
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "ref": "total"
+                },
+                8
+              ]
+            }
+          ]
+        },
+        "value": true,
+        "basis": [
+          "threshold",
+          "virginia-assumption"
+        ],
+        "actor": "va"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "total",
+        "label": "已批准州数",
+        "field": "total"
+      },
+      {
+        "id": "threshold",
+        "label": "是否达到门槛",
+        "field": "threshold"
+      }
+    ]
+  }
+}

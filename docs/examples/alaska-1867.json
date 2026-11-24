@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "1",
+  "status": "ready",
+  "options": [],
+  "title": "如果阿拉斯加购地款分两期支付？",
+  "question": "如果 1867 年阿拉斯加购买条约允许分期付款，第一个付款期限应付多少？",
+  "scope": "只比较付款条款约定的现金流。总价相同，首期付款比例以假设设定，条约是否会因此获得批准另需研究。",
+  "sources": [
+    {
+      "id": "treaty",
+      "title": "美国国家档案馆 · 阿拉斯加购买文件",
+      "url": "https://www.archives.gov/milestone-documents/check-for-the-purchase-of-alaska",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    }
+  ],
+  "claims": [
+    {
+      "id": "article-six",
+      "text": "原条约第六条规定，在批准书交换后的十个月内支付 720 万金美元。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "treaty",
+          "locator": "Article VI · 期限",
+          "quote": "within ten months after the exchange of the ratifications"
+        },
+        {
+          "source": "treaty",
+          "locator": "Article VI · 金额",
+          "quote": "seven million two hundred thousand dollars in gold"
+        }
+      ]
+    },
+    {
+      "id": "split",
+      "text": "改写方案假定双方接受总价不变而分期支付。以首期 40% 和 60% 两种条款作对照，比例由用户选择。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    }
+  ],
+  "timeline": [
+    {
+      "when": "1867 年 3 月 30 日",
+      "label": "购买条约签订，第六条载明付款约定",
+      "basis": [
+        "article-six"
+      ]
+    }
+  ],
+  "gaps": [
+    "模型仅计算协议中的应付款，实际支付日期、利息和交易对方的谈判反应需要另外建模。"
+  ],
+  "model": {
+    "decisionPoint": "1867 年 3 月制订购地付款条款时，对比一次付清和分期条款。",
+    "decisionBasis": [
+      "article-six"
+    ],
+    "horizon": 1,
+    "stepLabel": "个付款期限",
+    "actors": [
+      {
+        "id": "treasury",
+        "label": "美国财政部门"
+      }
+    ],
+    "variables": [
+      {
+        "id": "installments",
+        "label": "协议采用分期",
+        "role": "decision",
+        "kind": "boolean",
+        "initial": false,
+        "basis": [
+          "article-six"
+        ]
+      },
+      {
+        "id": "total",
+        "label": "约定总价",
+        "role": "parameter",
+        "kind": "number",
+        "initial": 7200000,
+        "basis": [
+          "article-six"
+        ],
+        "unit": "金美元",
+        "min": 0
+      },
+      {
+        "id": "share",
+        "label": "第一期比例（小数）",
+        "role": "parameter",
+        "kind": "number",
+        "initial": 0.4,
+        "basis": [
+          "split"
+        ],
+        "unit": "1",
+        "min": 0,
+        "max": 1
+      },
+      {
+        "id": "due",
+        "label": "首个期限应付金额",
+        "role": "state",
+        "kind": "number",
+        "initial": null,
+        "basis": [
+          "article-six",
+          "split"
+        ],
+        "unit": "金美元"
+      }
+    ],
+    "decisions": [
+      {
+        "id": "baseline",
+        "label": "期限内全额支付",
+        "value": false,
+        "basis": [
+          "article-six"
+        ]
+      },
+      {
+        "id": "split",
+        "label": "改为两期支付",
+        "value": true,
+        "basis": [
+          "split"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "share-40",
+        "label": "首期支付 40%",
+        "parameters": {
+          "share": 0.4
+        },
+        "basis": [
+          "split"
+        ]
+      },
+      {
+        "id": "share-60",
+        "label": "首期支付 60%",
+        "parameters": {
+          "share": 0.6
+        },
+        "basis": [
+          "split"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "cash-installment",
+        "label": "将协议总额乘以首期比例",
+        "target": "due",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "ref": "installments"
+        },
+        "value": {
+          "op": "mul",
+          "args": [
+            {
+              "ref": "total"
+            },
+            {
+              "ref": "share"
+            }
+          ]
+        },
+        "basis": [
+          "article-six",
+          "split"
+        ],
+        "actor": "treasury"
+      },
+      {
+        "id": "cash-full",
+        "label": "首个期限应付全额",
+        "target": "due",
+        "start": 1,
+        "until": 1,
+        "when": true,
+        "value": {
+          "ref": "total"
+        },
+        "basis": [
+          "article-six"
+        ],
+        "actor": "treasury"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "due",
+        "label": "首个期限应付金额",
+        "field": "due"
+      }
+    ]
+  }
+}

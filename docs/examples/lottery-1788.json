@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 2,
+  "engineVersion": "2",
+  "status": "ready",
+  "title": "如果 1788 年的这次表决改由抽签决定？",
+  "question": "如果 1788 年新罕布什尔改从当天投票的代表中等概率抽一人决定，宪法会在当天达到批准门槛吗？",
+  "scope": "考察当日是否达到门槛。模型把档案记载的实际赞成、反对票当作固定的抽签人群构成。",
+  "sources": [
+    {
+      "id": "constitution",
+      "title": "美国国家档案馆 · 宪法原文",
+      "url": "https://www.archives.gov/founding-docs/constitution-transcript",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    },
+    {
+      "id": "votes",
+      "title": "美国国家档案馆 · 各州批准日期与票数",
+      "url": "https://www.archives.gov/education/lessons/constitution-day/activities.html",
+      "accessed": "2026-11-20",
+      "origin": "web"
+    }
+  ],
+  "claims": [
+    {
+      "id": "threshold",
+      "text": "宪法第七条规定九州批准后在批准各州之间成立。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "constitution",
+          "locator": "Article VII",
+          "quote": "The Ratification of the Conventions of nine States, shall be sufficient"
+        }
+      ]
+    },
+    {
+      "id": "vote",
+      "text": "档案表记载新罕布什尔为第九个批准州，当天 57 票赞成、47 票反对。",
+      "status": "supported",
+      "scope": "context",
+      "citations": [
+        {
+          "source": "votes",
+          "locator": "Ratification votes by state",
+          "quote": "New Hampshire June 21, 1788 9 57 47"
+        }
+      ]
+    },
+    {
+      "id": "population",
+      "text": "假设每位实际投票的代表等可能被抽中，且赞成或反对的立场与史实相同。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    },
+    {
+      "id": "scope",
+      "text": "本演示只比较在固定投票人群下，决策程序改变后的直接结果。",
+      "status": "assumption",
+      "scope": "context",
+      "citations": []
+    }
+  ],
+  "timeline": [
+    {
+      "when": "1788 年 6 月 21 日",
+      "label": "新罕布什尔批准宪法，成为第九个批准州。",
+      "basis": [
+        "vote",
+        "threshold"
+      ]
+    }
+  ],
+  "gaps": [
+    "抽签是用于演示概率计算的假设。若程序变化影响代表的参与或立场，需重建抽样人群。"
+  ],
+  "options": [],
+  "model": {
+    "horizon": 1,
+    "stepLabel": "次表决",
+    "decisionPoint": "1788 年 6 月 21 日新罕布什尔批准会议的表决机制。",
+    "decisionBasis": [
+      "vote"
+    ],
+    "actors": [
+      {
+        "id": "convention",
+        "label": "新罕布什尔州批准会议"
+      }
+    ],
+    "variables": [
+      {
+        "id": "drawing",
+        "label": "用抽签替代表决",
+        "kind": "boolean",
+        "role": "decision",
+        "initial": false,
+        "basis": [
+          "vote"
+        ]
+      },
+      {
+        "id": "selected",
+        "label": "抽中的代表赞成",
+        "kind": "boolean",
+        "role": "parameter",
+        "initial": null,
+        "basis": [
+          "population"
+        ]
+      },
+      {
+        "id": "result",
+        "label": "当日是否达到批准门槛",
+        "kind": "category",
+        "role": "state",
+        "values": [
+          "当天达到九州门槛",
+          "当天未达到九州门槛"
+        ],
+        "initial": null,
+        "basis": [
+          "threshold",
+          "population"
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "id": "baseline",
+        "label": "按史实进行表决",
+        "value": false,
+        "basis": [
+          "vote"
+        ]
+      },
+      {
+        "id": "draw",
+        "label": "等概率抽一人决定",
+        "value": true,
+        "basis": [
+          "population"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "draw-support",
+        "label": "抽到原本投赞成票的代表",
+        "parameters": {
+          "selected": true
+        },
+        "basis": [
+          "vote",
+          "population"
+        ]
+      },
+      {
+        "id": "draw-oppose",
+        "label": "抽到原本投反对票的代表",
+        "parameters": {
+          "selected": false
+        },
+        "basis": [
+          "vote",
+          "population"
+        ]
+      }
+    ],
+    "rules": [
+      {
+        "id": "baseline-result",
+        "label": "按记录中的多数票批准",
+        "target": "result",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "ref": "drawing"
+            }
+          ]
+        },
+        "value": "当天达到九州门槛",
+        "basis": [
+          "vote",
+          "threshold"
+        ]
+      },
+      {
+        "id": "sample-yes",
+        "label": "抽中赞成者则批准",
+        "target": "result",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "ref": "selected"
+        },
+        "value": "当天达到九州门槛",
+        "basis": [
+          "population",
+          "threshold"
+        ]
+      },
+      {
+        "id": "sample-no",
+        "label": "抽中反对者则本州未批准",
+        "target": "result",
+        "start": 1,
+        "until": 1,
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "ref": "selected"
+            }
+          ]
+        },
+        "value": "当天未达到九州门槛",
+        "basis": [
+          "population",
+          "threshold"
+        ]
+      }
+    ],
+    "metrics": [
+      {
+        "id": "outcome",
+        "label": "当日走向",
+        "field": "result"
+      }
+    ],
+    "forecast": {
+      "decision": "draw",
+      "metric": "outcome",
+      "baselineCheck": {
+        "value": "当天达到九州门槛",
+        "basis": ["vote", "threshold"]
+      },
+      "factors": [
+        {
+          "kind": "internal",
+          "status": "modeled",
+          "explanation": "从档案记录的赞成和反对代表构成抽签人群。",
+          "variables": [
+            "selected"
+          ],
+          "basis": [
+            "vote",
+            "population"
+          ]
+        },
+        {
+          "kind": "external",
+          "status": "modeled",
+          "explanation": "此前已有八州批准，新罕布什尔批准即触及门槛。",
+          "variables": [
+            "result"
+          ],
+          "basis": [
+            "vote",
+            "threshold"
+          ]
+        },
+        {
+          "kind": "strategy",
+          "status": "irrelevant",
+          "explanation": "模型固定各代表的立场，范围是当天的程序变化。",
+          "variables": [],
+          "basis": [
+            "scope"
+          ]
+        },
+        {
+          "kind": "weather",
+          "status": "irrelevant",
+          "explanation": "抽签人群固定为当日实际投票者。",
+          "variables": [],
+          "basis": [
+            "scope"
+          ]
+        }
+      ],
+      "weights": {
+        "method": "每位实际投票代表等可能被抽到，赞成组 57 人，反对组 47 人。",
+        "counts": [
+          {
+            "scenario": "draw-support",
+            "count": 57,
+            "basis": [
+              "vote"
+            ]
+          },
+          {
+            "scenario": "draw-oppose",
+            "count": 47,
+            "basis": [
+              "vote"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
