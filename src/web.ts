@@ -6,6 +6,7 @@ import { drawHistoricalStudy } from './study-report.ts';
 import type { Simulation } from './engine.ts';
 import { drawAgentBoard } from './agent-board.ts';
 import { drawModelGraph } from './model-graph.ts';
+import { drawStudioOverview } from './studio-dashboard.ts';
 import { assembleQuestion, normalizeQuestion } from './question.ts';
 import { detectKeyProvider, isPersonalModel, personalModels } from './personal-models.ts';
 import { researchPhases } from './research-progress.ts';
@@ -449,9 +450,12 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
   header.append(heading, button);
-  results.replaceChildren(header, el('p', 'result-scope', bundle.scope));
+  const mount = el('div', 'studio-shell');
+  results.replaceChildren(mount);
+  mount.append(header, el('p', 'result-scope', bundle.scope));
   if (bundle.model) {
     const analysis = simulate(bundle, { horizon });
+    mount.append(drawStudioOverview(bundle, analysis));
     const sections = el('nav', 'result-links');
     sections.setAttribute('aria-label', '推演报告分区');
     const anchors = [
@@ -468,14 +472,14 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
       });
       sections.append(link);
     }
-    results.append(sections);
-    if (analysis.forecast) results.append(drawForecast(bundle, analysis));
-    if (bundle.audit && analysis.historicalAudit) results.append(drawHistoricalStudy(bundle, analysis, references, show));
+    mount.append(sections);
+    if (analysis.forecast) mount.append(drawForecast(bundle, analysis));
+    if (bundle.audit && analysis.historicalAudit) mount.append(drawHistoricalStudy(bundle, analysis, references, show));
     const demoScenario = selectedDemo ? analysis.switches[0]?.afterScenario : undefined;
-    results.append(drawProcess(bundle, analysis), drawAgentBoard(bundle, analysis, references, demoScenario),
+    mount.append(drawProcess(bundle, analysis), drawAgentBoard(bundle, analysis, references, demoScenario),
       drawModelGraph(bundle, references));
   } else if (bundle.status === 'insufficient') {
-    results.append(el('p', 'model-note', '还没有通过校验的模型。下方保留可查的史料和缺口。'));
+    mount.append(el('p', 'model-note', '还没有通过校验的模型。下方保留可查的史料和缺口。'));
   }
   if (bundle.status === 'clarification') {
     const section = el('section', 'monitor');
@@ -492,7 +496,7 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
       line.append(use, references(bundle, option.basis));
       section.append(line);
     }
-    results.append(section);
+    mount.append(section);
   }
   const record = el('div', 'result-grid');
   const timeline = el('section', 'monitor');
@@ -515,8 +519,8 @@ function render(bundle: Bundle, scenario?: string, horizon?: number) {
     details.id = 'research-evidence';
     details.open = Boolean(scenario) || !bundle.model.forecast;
     details.append(el('summary', undefined, '模型、史料与复算'), drawModel(bundle, scenario, horizon), record, viewSources(bundle));
-    results.append(details);
-  } else results.append(record, viewSources(bundle));
+    mount.append(details);
+  } else mount.append(record, viewSources(bundle));
 }
 
 async function openCase(demo: string, playDemo = false) {
