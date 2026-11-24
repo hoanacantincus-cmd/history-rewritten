@@ -27,8 +27,9 @@ jobs:
         env:
           VITE_DEMO_ONLY: 'true'
           VITE_RESEARCH_API_ORIGIN: ${{ vars.HISTORY_RESEARCH_API_ORIGIN }}
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@v4
         with:
+          name: github-pages
           path: dist
-      - uses: actions/deploy-pages@v5
+      - uses: actions/deploy-pages@v4
         id: deployment
